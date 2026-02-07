@@ -1,5 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { isSafeMode } from "../infra/safe-mode.js";
+import { warn } from "../globals.js";
 import type { OnboardOptions } from "../commands/onboard-types.js";
 import type { OpenClawConfig } from "../config/config.js";
 import type { RuntimeEnv } from "../runtime.js";
@@ -198,6 +200,8 @@ export async function finalizeOnboardingWizard(
         await prompter.note(gatewayInstallErrorHint(), "Gateway");
       }
     }
+  } else if (installDaemon && isSafeMode()) {
+    warn("[safe-mode] Skipping Gateway service installation/management");
   }
 
   if (!opts.skipHealth) {
@@ -417,26 +421,31 @@ export async function finalizeOnboardingWizard(
       initialValue: true,
     });
     if (installShellCompletion) {
-      // Generate cache first (required for fast shell startup)
-      const cacheGenerated = await ensureCompletionCacheExists(cliName);
-      if (cacheGenerated) {
-        // Install to shell profile
-        await installCompletion(completionStatus.shell, true, cliName);
-        const profileHint =
-          completionStatus.shell === "zsh"
-            ? "~/.zshrc"
-            : completionStatus.shell === "bash"
-              ? "~/.bashrc"
-              : "~/.config/fish/config.fish";
-        await prompter.note(
-          `Shell completion installed. Restart your shell or run: source ${profileHint}`,
-          "Shell completion",
-        );
+      if (isSafeMode()) {
+        warn("[safe-mode] Skipping shell completion installation");
+        await prompter.note("Safe Mode enabled: skipping shell completion install.", "Safe Mode");
       } else {
-        await prompter.note(
-          `Failed to generate completion cache. Run \`${cliName} completion --install\` later.`,
-          "Shell completion",
-        );
+        // Generate cache first (required for fast shell startup)
+        const cacheGenerated = await ensureCompletionCacheExists(cliName);
+        if (cacheGenerated) {
+          // Install to shell profile
+          await installCompletion(completionStatus.shell, true, cliName);
+          const profileHint =
+            completionStatus.shell === "zsh"
+              ? "~/.zshrc"
+              : completionStatus.shell === "bash"
+                ? "~/.bashrc"
+                : "~/.config/fish/config.fish";
+          await prompter.note(
+            `Shell completion installed. Restart your shell or run: source ${profileHint}`,
+            "Shell completion",
+          );
+        } else {
+          await prompter.note(
+            `Failed to generate completion cache. Run \`${cliName} completion --install\` later.`,
+            "Shell completion",
+          );
+        }
       }
     }
   }

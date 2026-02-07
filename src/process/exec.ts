@@ -11,7 +11,26 @@ const execFileAsync = promisify(execFile);
  * Resolves a command for Windows compatibility.
  * On Windows, non-.exe commands (like npm, pnpm) require their .cmd extension.
  */
+import { isSafeMode } from "../infra/safe-mode.js";
+
+// ...
+
+/**
+ * Resolves a command for Windows compatibility.
+ * On Windows, non-.exe commands (like npm, pnpm) require their .cmd extension.
+ */
 function resolveCommand(command: string): string {
+  if (isSafeMode()) {
+    const base = path.basename(command).replace(/\.(exe|cmd|bat)$/i, "").toLowerCase();
+    const allowlist = ["node", "bun", "openclaw"];
+    const currentExec = path.basename(process.execPath).replace(/\.(exe|cmd|bat)$/i, "").toLowerCase();
+    
+    // Strict allowlist check: allowed names or the current executable itself
+    if (base !== currentExec && !allowlist.includes(base)) {
+        throw new Error(`Safe Mode validation failed: Execution of '${command}' is blocked.`);
+    }
+  }
+
   if (process.platform !== "win32") {
     return command;
   }

@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import type { PluginDiagnostic, PluginOrigin } from "./types.js";
 import { resolveConfigDir, resolveUserPath } from "../utils.js";
 import { resolveBundledPluginsDir } from "./bundled-dir.js";
@@ -298,12 +299,40 @@ function discoverFromPath(params: {
   }
 }
 
+import { isSafeMode } from "../infra/safe-mode.js";
+import { warn } from "../globals.js";
+
+// ...
+
 export function discoverOpenClawPlugins(params: {
   workspaceDir?: string;
   extraPaths?: string[];
 }): PluginDiscoveryResult {
   const candidates: PluginCandidate[] = [];
   const diagnostics: PluginDiagnostic[] = [];
+
+  if (isSafeMode()) {
+    const msg = "Safe Mode enabled: external plugins disabled (only bundled allowed)";
+    warn(`[safe-mode] ${msg}`);
+    diagnostics.push({
+      level: "warn",
+      message: msg,
+      source: "OPENCLAW_SAFE_MODE",
+    });
+    // Only proceed with bundled plugins, skip extraPaths and workspaceDir
+    const bundledDir = resolveBundledPluginsDir();
+    if (bundledDir) {
+      discoverInDirectory({
+        dir: bundledDir,
+        origin: "bundled",
+        candidates,
+        diagnostics,
+        seen: new Set(),
+      });
+    }
+    return { candidates, diagnostics };
+  }
+
   const seen = new Set<string>();
   const workspaceDir = params.workspaceDir?.trim();
 
