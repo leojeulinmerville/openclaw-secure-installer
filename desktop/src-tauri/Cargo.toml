@@ -1,0 +1,17 @@
+[package]
+name = "openclaw_secure_installer"
+version = "0.1.0"
+description = "OpenClaw Secure Installer"
+authors = ["OpenClaw"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = "2"
+
+[dependencies]
+tauri = { version = "2", features = ["shell-open"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,5 +1,6 @@
 packages:
   - .
+  - desktop
   - ui
   - packages/*
   - extensions/*

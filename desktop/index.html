@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenClaw Secure Installer</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="titlebar">
+        <h1>OpenClaw Secure Installer</h1>
+        <p class="subtitle">Desktop wizard for a locked down local gateway</p>
+      </header>
+      <section class="panel">
+        <h2>Step 1: Docker Desktop</h2>
+        <p>Status: <span id="docker-status">Not checked</span></p>
+        <button id="check-docker" type="button">Check Docker</button>
+      </section>
+      <section class="panel">
+        <h2>Next</h2>
+        <p>Wizard steps will appear here in the next milestone.</p>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
