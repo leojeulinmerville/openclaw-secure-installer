@@ -35,8 +35,20 @@ body {
   box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
 }
 
+.panel-hint {
+  margin: 6px 0 16px;
+  color: #59647a;
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
 button {
-  margin-top: 12px;
   padding: 10px 16px;
   border-radius: 8px;
   border: 1px solid #1b1f28;
@@ -47,4 +59,119 @@ button {
 
 button:hover {
   background: #293145;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.state-tag {
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #eef1f6;
+  color: #2f3640;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.state-tag.running {
+  background: #fff3cd;
+  color: #7a5c00;
+}
+
+.state-tag.success {
+  background: #d1f7dc;
+  color: #0f6b3a;
+}
+
+.state-tag.error {
+  background: #fde1e1;
+  color: #9a1c1c;
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.status-card {
+  border: 1px solid #e4e9f2;
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.status-label {
+  font-weight: 600;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  width: fit-content;
+}
+
+.pill.ok {
+  background: #d1f7dc;
+  color: #0f6b3a;
+}
+
+.pill.bad {
+  background: #fde1e1;
+  color: #9a1c1c;
+}
+
+.pill.neutral {
+  background: #eef1f6;
+  color: #2f3640;
+}
+
+.version {
+  font-size: 12px;
+  color: #6c768a;
+}
+
+.remediation {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fff3cd;
+  color: #7a5c00;
+}
+
+.details {
+  margin-top: 12px;
+  color: #3c4658;
+}
+
+.details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.details ul {
+  margin: 8px 0 0 18px;
+  padding: 0;
+}
+
+.timestamp {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #6c768a;
+}
+
+.hidden {
+  display: none;
 }

@@ -14,8 +14,34 @@
       </header>
       <section class="panel">
         <h2>Step 1: Docker Desktop</h2>
-        <p>Status: <span id="docker-status">Not checked</span></p>
-        <button id="check-docker" type="button">Check Docker</button>
+        <p class="panel-hint">Verification locale de Docker Desktop et Docker Compose v2.</p>
+        <div class="panel-actions">
+          <button id="check-docker" type="button">Check Docker</button>
+          <span id="check-state" class="state-tag">Idle</span>
+        </div>
+        <div class="status-grid">
+          <div class="status-card">
+            <span class="status-label">Docker CLI</span>
+            <span id="status-cli" class="pill neutral">Not checked</span>
+            <span id="version-cli" class="version"></span>
+          </div>
+          <div class="status-card">
+            <span class="status-label">Daemon</span>
+            <span id="status-daemon" class="pill neutral">Not checked</span>
+            <span id="version-server" class="version"></span>
+          </div>
+          <div class="status-card">
+            <span class="status-label">Compose v2</span>
+            <span id="status-compose" class="pill neutral">Not checked</span>
+            <span id="version-compose" class="version"></span>
+          </div>
+        </div>
+        <div id="remediation" class="remediation hidden"></div>
+        <details id="diagnostics-panel" class="details hidden">
+          <summary>Details</summary>
+          <ul id="diagnostics"></ul>
+        </details>
+        <p id="last-check" class="timestamp"></p>
       </section>
       <section class="panel">
         <h2>Next</h2>

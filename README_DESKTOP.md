@@ -2,8 +2,9 @@
 
 ## Overview
 This folder contains the Windows desktop app scaffold for the Secure Installer MVP.
-The UI is a minimal placeholder for Step 1. Docker orchestration and secrets storage
-will be added in later steps.
+Step 2 adds a Docker Desktop verification command (checkDocker) and a basic UI
+surface for its result. Docker orchestration and secrets storage will be added in
+later steps.
 
 ## Prerequisites
 - Node.js 22 or newer
@@ -21,6 +22,21 @@ pnpm --dir desktop tauri:dev
 ```
 
 This starts the Vite dev server and the Tauri shell.
+
+### checkDocker behavior
+checkDocker verifies:
+- Docker CLI presence (`docker --version`)
+- Docker daemon reachability (`docker info`)
+- Docker Compose v2 availability (`docker compose version`)
+- Docker server version (`docker version --format "{{.Server.Version}}"`)
+
+If any check fails, a short remediation message is displayed in the UI:
+- Docker CLI missing: install Docker Desktop
+- Daemon unreachable: start Docker Desktop
+- Compose v2 missing: update Docker Desktop
+
+To test in dev: run `pnpm --dir desktop tauri:dev`, click **Check Docker** in the UI,
+and confirm the status pills, versions, remediation, and diagnostics update.
 
 ## Build
 From the repo root:
