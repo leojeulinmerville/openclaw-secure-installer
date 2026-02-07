@@ -10,6 +10,7 @@ const localWorkers = Math.max(4, Math.min(16, os.cpus().length));
 const ciWorkers = isWindows ? 2 : 3;
 
 export default defineConfig({
+  cacheDir: process.env.VITE_CACHE_DIR || "node_modules/.vite",
   resolve: {
     alias: {
       "openclaw/plugin-sdk": path.join(repoRoot, "src", "plugin-sdk", "index.ts"),
