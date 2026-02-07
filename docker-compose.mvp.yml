@@ -1,0 +1,37 @@
+services:
+  openclaw-gateway:
+    image: openclaw:local
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    environment:
+      HOME: /home/node
+      TERM: xterm-256color
+
+      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
+      OPENCLAW_GATEWAY_PASSWORD: ${OPENCLAW_GATEWAY_PASSWORD:-}
+
+      OPENCLAW_SAFE_MODE: "1"
+      BROWSER: "echo"
+
+    command: [ "node", "openclaw.mjs", "gateway", "--port", "18789", "--bind", "loopback" ]
+
+    ports:
+      - "127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}:18789"
+      - "127.0.0.1:${OPENCLAW_BRIDGE_PORT:-18790}:18790"
+
+    volumes:
+      - ./mvp-data/home:/home/node
+
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    init: true
+    restart: unless-stopped
