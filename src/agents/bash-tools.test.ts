@@ -271,7 +271,27 @@ describe("exec tool backgrounding", () => {
 });
 
 describe("exec notifyOnExit", () => {
+  const originalSafeMode = process.env.OPENCLAW_SAFE_MODE;
+
+  beforeEach(() => {
+    // Ensure Safe Mode is disabled for this test suite
+    delete process.env.OPENCLAW_SAFE_MODE;
+  });
+
+  afterEach(() => {
+    // Restore original Safe Mode value
+    if (originalSafeMode !== undefined) {
+      process.env.OPENCLAW_SAFE_MODE = originalSafeMode;
+    } else {
+      delete process.env.OPENCLAW_SAFE_MODE;
+    }
+  });
+
   it("enqueues a system event when a backgrounded exec exits", async () => {
+    // Use portable Node.js command instead of bash
+    const nodeScript = `setTimeout(() => console.log('notify'), 50)`;
+    const portableCommand = `"${process.execPath}" -e "${nodeScript.replace(/"/g, '\\"')}"`;
+
     const tool = createExecTool({
       allowBackground: true,
       backgroundMs: 0,
@@ -280,7 +300,7 @@ describe("exec notifyOnExit", () => {
     });
 
     const result = await tool.execute("call1", {
-      command: echoAfterDelay("notify"),
+      command: portableCommand,
       background: true,
     });
 

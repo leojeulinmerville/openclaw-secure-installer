@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { MACOS_APP_SOURCES_DIR } from "../compat/legacy-names.js";
@@ -22,6 +23,9 @@ const UI_FILES = ["ui/src/ui/types.ts", "ui/src/ui/ui-types.ts", "ui/src/ui/view
 const SWIFT_MODEL_CANDIDATES = [`${MACOS_APP_SOURCES_DIR}/CronModels.swift`];
 const SWIFT_STATUS_CANDIDATES = [`${MACOS_APP_SOURCES_DIR}/GatewayConnection.swift`];
 
+// Check if macOS app sources exist (absent in lightweight/secure installer forks)
+const hasMacOSApp = existsSync(path.join(process.cwd(), MACOS_APP_SOURCES_DIR));
+
 async function resolveSwiftFiles(cwd: string, candidates: string[]): Promise<string[]> {
   const matches: string[] = [];
   for (const relPath of candidates) {
@@ -38,7 +42,7 @@ async function resolveSwiftFiles(cwd: string, candidates: string[]): Promise<str
   return matches;
 }
 
-describe("cron protocol conformance", () => {
+describe.skipIf(!hasMacOSApp)("cron protocol conformance", () => {
   it("ui + swift include all cron delivery modes from gateway schema", async () => {
     const modes = extractDeliveryModes(CronDeliverySchema as SchemaLike);
     expect(modes.length).toBeGreaterThan(0);
