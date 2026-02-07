@@ -1,9 +1,18 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import os from "node:os";
+import path from "node:path";
 import process from "node:process";
 import { runExec } from "../process/exec.js";
 import { discoverOpenClawPlugins } from "../plugins/discovery.js";
 import { finalizeOnboardingWizard } from "../wizard/onboarding.finalize.js";
 import { installCompletion } from "../cli/completion-cli.js";
+import {
+  checkShellCompletionStatus,
+  ensureCompletionCacheExists,
+} from "../commands/doctor-completion.js";
+import { buildGatewayInstallPlan } from "../commands/daemon-install-helpers.js";
+import { resolveGatewayService } from "../daemon/service.js";
+import { ensureSystemdUserLingerInteractive } from "../commands/systemd-linger.js";
 
 // Mock dependencies
 vi.mock("node:child_process", async () => {
@@ -32,7 +41,12 @@ vi.mock("../cli/completion-cli.js", () => ({
 }));
 
 vi.mock("../commands/doctor-completion.js", () => ({
-  checkShellCompletionStatus: vi.fn(() => ({ profileInstalled: false, shell: "bash", usesSlowPattern: false, cacheExists: false })),
+  checkShellCompletionStatus: vi.fn(() => ({
+    profileInstalled: false,
+    shell: "bash",
+    usesSlowPattern: false,
+    cacheExists: false,
+  })),
   ensureCompletionCacheExists: vi.fn(() => true),
 }));
 
@@ -46,7 +60,25 @@ vi.mock("../commands/onboard-helpers.js", () => ({
 }));
 
 vi.mock("../daemon/service.js", () => ({
-  resolveGatewayService: vi.fn(() => ({ isLoaded: vi.fn(() => false) })),
+  resolveGatewayService: vi.fn(() => ({
+    isLoaded: vi.fn(() => false),
+    install: vi.fn(),
+    restart: vi.fn(),
+    uninstall: vi.fn(),
+  })),
+}));
+
+vi.mock("../commands/daemon-install-helpers.js", () => ({
+  buildGatewayInstallPlan: vi.fn(async () => ({
+    programArguments: [],
+    workingDirectory: os.tmpdir(),
+    environment: {},
+  })),
+  gatewayInstallErrorHint: vi.fn(() => "install hint"),
+}));
+
+vi.mock("../commands/systemd-linger.js", () => ({
+  ensureSystemdUserLingerInteractive: vi.fn(),
 }));
 
 vi.mock("../infra/control-ui-assets.js", () => ({
@@ -81,49 +113,45 @@ describe("Safe Mode", () => {
   });
 
   describe("Process Execution", () => {
-    it("should block disallowed commands in Safe Mode (e.g. ls)", async () => {
+    it("blocks disallowed commands in Safe Mode", async () => {
       process.env.OPENCLAW_SAFE_MODE = "1";
-      await expect(runExec("ls", ["-la"])).rejects.toThrow(/Safe Mode validation failed: Execution of 'ls' is blocked/);
+      await expect(runExec("not-allowed", ["--version"])).rejects.toThrow(
+        /Safe Mode validation failed: Execution of 'not-allowed' is blocked/,
+      );
     });
 
-    it("should allow approved commands in Safe Mode (node)", async () => {
+    it("allows approved commands in Safe Mode (node)", async () => {
       process.env.OPENCLAW_SAFE_MODE = "1";
       await expect(runExec("node", ["-v"])).resolves.toBeDefined();
     });
 
-    it("should allow process.execPath in Safe Mode", async () => {
+    it("allows process.execPath in Safe Mode", async () => {
       process.env.OPENCLAW_SAFE_MODE = "1";
-      // We assume runExec calls resolveCommand which checks process.execPath
-      // But we can't easily pass the exact path of current node unless we know it.
-      // However, "node" is in allowlist.
-      // Let's rely on "node" test above.
-      // If we could determine current exec path, we'd test it.
-      const currentExec = process.execPath;
-      // This might fail if runExec doesn't receive the absolute path but just "node"
-      // But resolveCommand logic handles absolute path matching.
-      // We will skip this specific test for now as "node" covers the main use case.
+      await expect(runExec(process.execPath, ["-v"])).resolves.toBeDefined();
     });
 
-    it("should allow all commands when Safe Mode is off", async () => {
+    it("allows all commands when Safe Mode is off", async () => {
       delete process.env.OPENCLAW_SAFE_MODE;
-      await expect(runExec("ls", ["-la"])).resolves.toBeDefined();
+      await expect(
+        runExec(process.execPath, ["-e", "process.stdout.write('ok')"]),
+      ).resolves.toBeDefined();
     });
   });
 
   describe("Plugin Discovery", () => {
-    it("should not discover external plugins in Safe Mode", () => {
+    it("does not discover external plugins in Safe Mode", () => {
       process.env.OPENCLAW_SAFE_MODE = "1";
-      
-      const result = discoverOpenClawPlugins({ extraPaths: ["/tmp/malicious/plugin"] });
-      
-      // Should not contain any candidate from extraPaths
-      const hasNonBundled = result.candidates.some(c => c.rootDir.includes("/tmp/malicious"));
+
+      const extraPath = path.join(os.tmpdir(), "openclaw-safe-mode-plugin");
+      const result = discoverOpenClawPlugins({ extraPaths: [extraPath], workspaceDir: extraPath });
+
+      const hasNonBundled = result.candidates.some((candidate) => candidate.origin !== "bundled");
       expect(hasNonBundled).toBe(false);
 
       expect(result.diagnostics).toEqual(
         expect.arrayContaining([
           expect.objectContaining({
-            message: expect.stringContaining("Safe Mode enabled: external plugins disabled"),
+            message: expect.stringContaining("External plugins discovery disabled"),
           }),
         ]),
       );
@@ -131,35 +159,38 @@ describe("Safe Mode", () => {
   });
 
   describe("Onboarding Wizard", () => {
-    it("should skip shell completion installation in Safe Mode", async () => {
+    it("skips host modifications in Safe Mode", async () => {
       process.env.OPENCLAW_SAFE_MODE = "1";
-      
+
       const mockPrompter = {
-        confirm: vi.fn(() => Promise.resolve(true)), // User says YES to install completion
+        confirm: vi.fn(() => Promise.resolve(true)),
         note: vi.fn(() => Promise.resolve()),
         progress: vi.fn(() => ({ update: vi.fn(), stop: vi.fn() })),
         select: vi.fn(() => Promise.resolve("skip")),
         outro: vi.fn(),
-      } as any;
+      };
 
       await finalizeOnboardingWizard({
         flow: "manual",
-        opts: { skipUi: true, skipHealth: true, installDaemon: false },
+        opts: { skipUi: true, skipHealth: true, installDaemon: true },
         baseConfig: {},
         nextConfig: {},
         settings: { port: 1234, bind: "localhost" } as any,
         prompter: mockPrompter,
         runtime: { error: vi.fn() } as any,
-        workspaceDir: "/tmp",
+        workspaceDir: os.tmpdir(),
       });
 
-      // Assert installCompletion was NOT called
       expect(installCompletion).not.toHaveBeenCalled();
-      
-      // Assert specific note was shown
+      expect(checkShellCompletionStatus).not.toHaveBeenCalled();
+      expect(ensureCompletionCacheExists).not.toHaveBeenCalled();
+      expect(vi.mocked(resolveGatewayService)).not.toHaveBeenCalled();
+      expect(vi.mocked(buildGatewayInstallPlan)).not.toHaveBeenCalled();
+      expect(vi.mocked(ensureSystemdUserLingerInteractive)).not.toHaveBeenCalled();
+
       expect(mockPrompter.note).toHaveBeenCalledWith(
         expect.stringContaining("Safe Mode enabled: skipping shell completion install"),
-        "Safe Mode"
+        "Safe Mode",
       );
     });
   });

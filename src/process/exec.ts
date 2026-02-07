@@ -21,13 +21,20 @@ import { isSafeMode } from "../infra/safe-mode.js";
  */
 function resolveCommand(command: string): string {
   if (isSafeMode()) {
-    const base = path.basename(command).replace(/\.(exe|cmd|bat)$/i, "").toLowerCase();
-    const allowlist = ["node", "bun", "openclaw"];
-    const currentExec = path.basename(process.execPath).replace(/\.(exe|cmd|bat)$/i, "").toLowerCase();
-    
+    const normalized = command.trim();
+    const base = path.basename(normalized).replace(/\.(exe|cmd|bat)$/i, "").toLowerCase();
+    const allowlist = new Set(["node", "bun", "openclaw"]);
+    const currentExecBase = path
+      .basename(process.execPath)
+      .replace(/\.(exe|cmd|bat)$/i, "")
+      .toLowerCase();
+    const isCurrentExecPath = path.isAbsolute(normalized)
+      ? path.resolve(normalized) === path.resolve(process.execPath)
+      : false;
+
     // Strict allowlist check: allowed names or the current executable itself
-    if (base !== currentExec && !allowlist.includes(base)) {
-        throw new Error(`Safe Mode validation failed: Execution of '${command}' is blocked.`);
+    if (!isCurrentExecPath && base !== currentExecBase && !allowlist.has(base)) {
+      throw new Error(`Safe Mode validation failed: Execution of '${command}' is blocked.`);
     }
   }
 

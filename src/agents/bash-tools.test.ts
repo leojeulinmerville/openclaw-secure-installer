@@ -289,8 +289,7 @@ describe("exec notifyOnExit", () => {
 
   it("enqueues a system event when a backgrounded exec exits", async () => {
     // Use portable Node.js command instead of bash
-    const nodeScript = `setTimeout(() => console.log('notify'), 50)`;
-    const portableCommand = `"${process.execPath}" -e "${nodeScript.replace(/"/g, '\\"')}"`;
+    const portableCommand = `"${process.execPath}" -e "setTimeout(() => process.exit(0), 50)"`;
 
     const tool = createExecTool({
       allowBackground: true,

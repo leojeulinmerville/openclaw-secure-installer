@@ -1,56 +1,166 @@
-# Secure Installer MVP Verification
+# Secure Installer Verification
 
-This guide validates the Secure Installer MVP (Windows host, Docker runtime) with Safe Mode implementation.
+## Start and Stop
+Commands:
 
-## 1. Prerequisites
-- Switch to `mvp` branch: `git checkout mvp`
-- Ensure no existing containers: `docker compose -f docker-compose.mvp.yml down`
-
-## 2. Docker Build & Setup
-Build the images and run the setup wizard.
-```powershell
+```text
+docker compose -f docker-compose.mvp.yml --env-file .env.mvp down
 docker compose -f docker-compose.mvp.yml --env-file .env.mvp up -d --build
+```
+
+Observed output (up -d --build, excerpt):
+
+```text
+openclaw-cli  Built
+openclaw-gateway  Built
+Container openclaw-secure-installer-openclaw-gateway-1  Recreated
+Container openclaw-secure-installer-openclaw-cli-1  Recreated
+Container openclaw-secure-installer-openclaw-gateway-1  Started
+```
+
+## Setup
+Command:
+
+```text
 docker compose -f docker-compose.mvp.yml --env-file .env.mvp run --rm openclaw-cli setup
 ```
-**Verification:**
-- Gateway logs should show "listening on ws://127.0.0.1:18789"
-- `docker compose -f docker-compose.mvp.yml --env-file .env.mvp logs -n 50 openclaw-gateway`
 
-## 3. Runtime Hardening Verification
-Verify the container is confined as expected.
-```powershell
-# Get Gateway Container ID
-$cid = docker ps -q --filter "name=openclaw-gateway"
+Observed output (excerpt):
 
-# 3.1 Read-only Rootfs (Should FAIL with "Read-only file system")
-docker exec -it $cid sh -lc "touch /app/should_fail && echo FAIL || echo OK"
-
-# 3.2 Persistent Home (Should SUCCEED)
-docker exec -it $cid sh -lc "touch /home/node/persist_test && echo OK || echo FAIL"
-
-# 3.3 Security Options (Should show ReadonlyRootfs=true, CapDrop=["ALL"], no-new-privileges=true)
-docker inspect $cid --format "{{json .HostConfig.ReadonlyRootfs}} {{json .HostConfig.CapDrop}} {{json .HostConfig.SecurityOpt}}"
+```text
+Config OK: ~/.openclaw/openclaw.json
+Workspace OK: ~/.openclaw/workspace
+Sessions OK: ~/.openclaw/agents/main/sessions
+Config warnings:
+- plugins: plugin: External plugins discovery disabled (only bundled allowed)
 ```
 
-## 4. Safe Mode Verification
-Verify that `OPENCLAW_SAFE_MODE=1` enforces restrictions.
-```powershell
-# Try to execute a disallowed command (e.g. ls) via openclaw-cli
-docker compose -f docker-compose.mvp.yml --env-file .env.mvp run --rm openclaw-cli agent run -- "ls -la"
-# Expect output containing: "Safe Mode validation failed"
+## Test Runs
+Command:
+
+```text
+pnpm vitest src/infra/safe-mode.test.ts
 ```
 
-## 5. Automated Tests
-Run specific tests to validate fixes in the secure environment.
-*Note: We force vitest cache to a writable directory for read-only containers.*
+Observed output (excerpt):
 
-```powershell
-# Browser CLI Extension (Fixture-based)
-docker compose -f docker-compose.mvp.yml --env-file .env.mvp run --rm --entrypoint sh openclaw-cli -lc "VITE_CACHE_DIR=/tmp/.vite-temp pnpm vitest src/cli/browser-cli-extension.test.ts"
-
-# Cron Protocol Conformance (Skips if no macOS)
-docker compose -f docker-compose.mvp.yml --env-file .env.mvp run --rm --entrypoint sh openclaw-cli -lc "VITE_CACHE_DIR=/tmp/.vite-temp pnpm vitest src/cron/cron-protocol-conformance.test.ts"
-
-# Bash Tools NotifyOnExit (Portable Node command)
-docker compose -f docker-compose.mvp.yml --env-file .env.mvp run --rm --entrypoint sh openclaw-cli -lc "VITE_CACHE_DIR=/tmp/.vite-temp pnpm vitest src/agents/bash-tools.test.ts -t notifyOnExit"
+```text
+RUN  v4.0.18
+? src/infra/safe-mode.test.ts (6 tests)
+Test Files 1 passed (1)
+Tests 6 passed (6)
 ```
+
+Command:
+
+```text
+pnpm vitest src/cli/browser-cli-extension.test.ts
+```
+
+Observed output (excerpt):
+
+```text
+RUN  v4.0.18
+? src/cli/browser-cli-extension.test.ts (4 tests)
+Test Files 1 passed (1)
+Tests 4 passed (4)
+```
+
+Command:
+
+```text
+pnpm vitest src/cron/cron-protocol-conformance.test.ts
+```
+
+Observed output (excerpt):
+
+```text
+RUN  v4.0.18
+? src/cron/cron-protocol-conformance.test.ts (2 tests)
+Test Files 1 passed (1)
+Tests 2 passed (2)
+```
+
+Command:
+
+```text
+pnpm vitest src/agents/bash-tools.test.ts -t notifyOnExit
+```
+
+Observed output (excerpt):
+
+```text
+RUN  v4.0.18
+? src/agents/bash-tools.test.ts (17 tests | 16 skipped)
+? enqueues a system event when a backgrounded exec exits
+Test Files 1 passed (1)
+Tests 1 passed | 16 skipped (17)
+```
+
+## Confinement Checks
+Command:
+
+```text
+docker compose -f docker-compose.mvp.yml --env-file .env.mvp exec -T openclaw-gateway touch /app/should_fail
+```
+
+Observed output:
+
+```text
+touch: cannot touch '/app/should_fail': Read-only file system
+```
+
+Command:
+
+```text
+docker compose -f docker-compose.mvp.yml --env-file .env.mvp exec -T openclaw-gateway touch /home/node/persist_test
+```
+
+Observed output:
+
+```text
+(no output, exit code 0)
+```
+
+Command:
+
+```text
+docker inspect openclaw-secure-installer-openclaw-gateway-1 --format "ReadonlyRootfs={{.HostConfig.ReadonlyRootfs}} CapDrop={{json .HostConfig.CapDrop}} SecurityOpt={{json .HostConfig.SecurityOpt}}"
+```
+
+Observed output:
+
+```text
+ReadonlyRootfs=true CapDrop=["ALL"] SecurityOpt=["no-new-privileges:true"]
+```
+
+## Safe Mode Check
+Command:
+
+```text
+node --input-type=module --import tsx -e "process.env.OPENCLAW_SAFE_MODE='1'; const { runExec } = await import('./src/process/exec.ts'); try { await runExec('not-allowed', []); } catch (err) { console.error(err instanceof Error ? err.message : String(err)); process.exit(1); }"
+```
+
+Observed output:
+
+```text
+Safe Mode validation failed: Execution of 'not-allowed' is blocked.
+```
+
+## Gateway Logs
+Command:
+
+```text
+docker compose -f docker-compose.mvp.yml --env-file .env.mvp logs -n 80 openclaw-gateway
+```
+
+Observed output (excerpt):
+
+```text
+[gateway] listening on ws://127.0.0.1:18789 (PID 15)
+[gateway] listening on ws://[::1]:18789
+```
+
+Expected:
+- listening on ws://127.0.0.1:18789
+- no "Missing config" lines

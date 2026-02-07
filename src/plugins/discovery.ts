@@ -312,7 +312,7 @@ export function discoverOpenClawPlugins(params: {
   const diagnostics: PluginDiagnostic[] = [];
 
   if (isSafeMode()) {
-    const msg = "Safe Mode enabled: external plugins disabled (only bundled allowed)";
+    const msg = "External plugins discovery disabled (only bundled allowed)";
     warn(`[safe-mode] ${msg}`);
     diagnostics.push({
       level: "warn",
