@@ -6,12 +6,29 @@ Step 2 adds a Docker Desktop verification command (checkDocker) and a basic UI
 surface for its result. Docker orchestration and secrets storage will be added in
 later steps.
 
-## Prerequisites
-- Node.js 22 or newer
+## Prerequisites Windows
+- Node.js 22.12+ (or 20.19+)
 - pnpm 10
-- Rust toolchain (stable) via rustup
+- Rust toolchain (stable) via rustup (cargo + rustc)
 - Windows: Visual Studio Build Tools with the Desktop C++ workload
 - Docker Desktop for the final product flow
+
+Verify versions:
+
+```text
+node -v
+pnpm -v
+cargo -V
+rustc -V
+```
+
+Optional DX check (pnpm has a built-in doctor command, so use run):
+
+```text
+pnpm --dir desktop run doctor
+```
+
+If Node is below 22.12 (or 20.19), Vite will refuse to start. Upgrade Node and retry.
 
 ## Development
 From the repo root:
