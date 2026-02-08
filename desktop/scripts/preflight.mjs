@@ -105,7 +105,7 @@ function parseMode(argv) {
 }
 
 function quoteCmdArg(arg) {
-  if (!/[\s\"]/u.test(arg)) {
+  if (!/[\s"]/u.test(arg)) {
     return arg;
   }
   return `"${arg.replace(/"/g, '""')}"`;
