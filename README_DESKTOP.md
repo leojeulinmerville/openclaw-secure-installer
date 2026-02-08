@@ -30,6 +30,22 @@ pnpm --dir desktop run doctor
 
 If Node is below 22.12 (or 20.19), Vite will refuse to start. Upgrade Node and retry.
 
+## If cargo is not found by Tauri
+The desktop preflight runs before `tauri dev` and `tauri build`. On Windows, it
+automatically tries to add these locations to PATH for the current run:
+- `%USERPROFILE%\\.cargo\\bin`
+- `%CARGO_HOME%\\bin` (if set)
+
+If cargo is still not found, install Rust with rustup and ensure the Visual
+Studio Build Tools Desktop C++ workload is installed.
+
+Manual verification commands:
+
+```text
+pnpm --dir desktop run doctor
+pnpm -C desktop tauri:dev
+```
+
 ## Development
 From the repo root:
 
