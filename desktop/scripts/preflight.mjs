@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -161,24 +161,23 @@ function runPreflight() {
   return env;
 }
 
-function runCommand(env, argv) {
+function runTauri(env, argv) {
   if (argv.length === 0) {
-    return;
+    console.error("No tauri command provided. Use: dev | build");
+    process.exit(1);
   }
-  const [cmd, ...args] = argv;
-  const child = spawn(cmd, args, {
+  const pnpmCmd = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+  const result = spawnSync(pnpmCmd, ["exec", "tauri", ...argv], {
     env,
     stdio: "inherit",
   });
-  child.on("exit", (code) => {
-    process.exit(code ?? 1);
-  });
-  child.on("error", (err) => {
-    console.error(`Failed to launch ${cmd}: ${err.message}`);
+  if (result.error) {
+    console.error(`Failed to launch pnpm exec tauri: ${result.error.message}`);
     process.exit(1);
-  });
+  }
+  process.exit(result.status ?? 1);
 }
 
 const env = runPreflight();
 const argv = process.argv.slice(2);
-runCommand(env, argv);
+runTauri(env, argv);
