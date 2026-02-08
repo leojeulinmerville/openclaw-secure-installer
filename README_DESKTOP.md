@@ -47,11 +47,19 @@ pnpm --dir desktop run doctor
 pnpm -C desktop tauri:dev
 ```
 
+## Test sequence
+From the repo root:
+
+```text
+pnpm --filter ./desktop... install
+pnpm -C desktop run doctor
+pnpm -C desktop tauri:dev
+```
+
 ## Development
 From the repo root:
 
 ```text
-pnpm --dir desktop install
 pnpm --dir desktop run doctor
 pnpm --dir desktop tauri:dev
 ```
