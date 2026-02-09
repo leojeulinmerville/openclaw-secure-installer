@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use tauri::AppHandle;
 
@@ -19,42 +19,49 @@ fn sanitize_output(text: &str) -> String {
     let mut lines = Vec::new();
     for line in text.lines() {
         let mut redacted_line = line.to_string();
-
-        // Key=Value redaction
         for key in SENSITIVE_KEYS {
             if line.contains(key) {
                 redacted_line = format!("{}= [REDACTED]", key);
-                break; // one match per line is enough
+                break;
             }
         }
-
-        // Bearer token redaction
         if let Some(idx) = redacted_line.find("Bearer ") {
             let prefix = &redacted_line[..idx];
             redacted_line = format!("{}Bearer [REDACTED]", prefix);
         }
-
         lines.push(redacted_line);
     }
     lines.join("\n")
 }
 
-// ── Structured result returned to the frontend ──────────────────────
+// ── Structured result ───────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayStartResult {
+    /// Is a gateway container actually running right now?
     pub gateway_active: bool,
+    /// "started" | "already_running" | "failed"
+    pub status: String,
     pub user_friendly_title: String,
     pub user_friendly_message: String,
     pub raw_diagnostics: String,
     pub remediation_steps: Vec<String>,
     pub compose_file_path: String,
+    /// Non-blocking warning (shown as a banner in Step 4)
+    pub warning: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PullTestResult {
+    pub accessible: bool,
+    pub image: String,
+    pub diagnostics: String,
 }
 
 // ── Remediation builder ─────────────────────────────────────────────
 
-/// Patterns that indicate a Docker image pull failure.
 const PULL_ERROR_PATTERNS: &[&str] = &[
     "pull access denied",
     "repository does not exist",
@@ -69,7 +76,6 @@ fn is_pull_access_error(stderr: &str) -> bool {
         .any(|pat| lower.contains(&pat.to_lowercase()))
 }
 
-/// Build a user-friendly error + remediation from the raw stderr.
 fn build_remediation(
     stderr: &str,
     compose_path: &Path,
@@ -79,19 +85,13 @@ fn build_remediation(
     if is_pull_access_error(stderr) {
         let title = "Image Pull Failed".to_string();
         let message = format!(
-            "Docker could not pull the container image specified in your compose file.\n\
-             Open {} and check the `image:` line.",
-            compose_display
+            "Docker could not pull the container image.\n\
+             Use the Image Source selector above to pick a valid image."
         );
         let steps = vec![
-            format!(
-                "A) Use a fully qualified image name in docker-compose.yml, e.g. \
-                 docker.io/<user>/openclaw:<tag> or ghcr.io/<org>/openclaw:<tag>. \
-                 File location: {}",
-                compose_display
-            ),
-            "B) If the image is in a private registry, run `docker login <registry>` in a terminal, then click Start Gateway again.".to_string(),
-            "C) For local development: build the image locally (`docker build -t openclaw:dev .`) and set the compose `image:` to `openclaw:dev`.".to_string(),
+            "Change the image in the Image Source section above and click \"Test Pull Access\" to verify.".to_string(),
+            "If using a private registry, log in first via the \"Private Registry\" tab.".to_string(),
+            "For local development, use the \"Local Build\" tab to build and use a local image.".to_string(),
         ];
         (title, message, steps)
     } else {
@@ -113,10 +113,10 @@ fn build_remediation(
     }
 }
 
-// ── Post-start verification ─────────────────────────────────────────
+// ── Container verification ──────────────────────────────────────────
 
 /// Returns `(is_running, diagnostics_text)`.
-fn check_gateway_running(dir: &Path) -> (bool, String) {
+fn check_gateway_running_internal(dir: &Path) -> (bool, String) {
     let output = Command::new("docker")
         .current_dir(dir)
         .args(["compose", "ps", "--format", "json"])
@@ -126,8 +126,6 @@ fn check_gateway_running(dir: &Path) -> (bool, String) {
         Ok(out) => {
             let stdout = String::from_utf8_lossy(&out.stdout);
             let stderr = String::from_utf8_lossy(&out.stderr);
-            // Docker Compose v2 emits one JSON object per line.
-            // A service is running if its State field contains "running".
             let has_running = stdout
                 .lines()
                 .any(|line| {
@@ -141,7 +139,71 @@ fn check_gateway_running(dir: &Path) -> (bool, String) {
     }
 }
 
+// ── Compose file rewrite ────────────────────────────────────────────
+
+pub fn generate_compose_content(image: &str) -> String {
+    format!(
+        r#"services:
+  gateway:
+    image: {}
+    command: ["node", "openclaw.mjs", "gateway"]
+    ports:
+      - "${{OPENCLAW_HTTP_PORT:-80}}:80"
+      - "${{OPENCLAW_HTTPS_PORT:-443}}:443"
+    volumes:
+      - openclaw_home:/home/node
+    environment:
+      - OPENCLAW_SAFE_MODE=1
+      - LOG_LEVEL=info
+    restart: unless-stopped
+
+volumes:
+  openclaw_home:
+"#,
+        image
+    )
+}
+
 // ── Tauri commands ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn is_gateway_running(app: AppHandle) -> Result<GatewayStartResult, String> {
+    let dir = get_app_data_dir(&app)?;
+    let compose_file = dir.join("docker-compose.yml");
+
+    if !compose_file.exists() {
+        return Ok(GatewayStartResult {
+            gateway_active: false,
+            status: "not_configured".to_string(),
+            user_friendly_title: "Not Configured".to_string(),
+            user_friendly_message: "No compose file found.".to_string(),
+            raw_diagnostics: String::new(),
+            remediation_steps: vec![],
+            compose_file_path: compose_file.display().to_string(),
+            warning: None,
+        });
+    }
+
+    let (running, diag) = check_gateway_running_internal(&dir);
+    Ok(GatewayStartResult {
+        gateway_active: running,
+        status: if running { "already_running" } else { "stopped" }.to_string(),
+        user_friendly_title: if running {
+            "Gateway Running".to_string()
+        } else {
+            "Gateway Stopped".to_string()
+        },
+        user_friendly_message: if running {
+            "OpenClaw Gateway is active.".to_string()
+        } else {
+            "Gateway is not currently running.".to_string()
+        },
+        raw_diagnostics: sanitize_output(&diag),
+        remediation_steps: vec![],
+        compose_file_path: compose_file.display().to_string(),
+        warning: None,
+    })
+}
 
 #[tauri::command]
 pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String> {
@@ -151,15 +213,32 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     if !compose_file.exists() {
         return Ok(GatewayStartResult {
             gateway_active: false,
+            status: "failed".to_string(),
             user_friendly_title: "Not Configured".to_string(),
             user_friendly_message: "docker-compose.yml not found. Please complete the Configure step first.".to_string(),
             raw_diagnostics: String::new(),
             remediation_steps: vec!["Go back to Step 2 and click Save & Configure.".to_string()],
             compose_file_path: compose_file.display().to_string(),
+            warning: None,
         });
     }
 
-    // 1) Run docker compose up -d
+    // 1) Check if already running BEFORE attempting compose up
+    let (pre_running, _) = check_gateway_running_internal(&dir);
+    if pre_running {
+        return Ok(GatewayStartResult {
+            gateway_active: true,
+            status: "already_running".to_string(),
+            user_friendly_title: "Gateway Already Running".to_string(),
+            user_friendly_message: "The gateway container is already active. No action needed.".to_string(),
+            raw_diagnostics: String::new(),
+            remediation_steps: vec![],
+            compose_file_path: compose_file.display().to_string(),
+            warning: None,
+        });
+    }
+
+    // 2) Run docker compose up -d
     let output = Command::new("docker")
         .current_dir(&dir)
         .args(["compose", "up", "-d"])
@@ -170,36 +249,55 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined_raw = format!("{}\n{}", stdout, stderr);
 
-    // 2) If exit code != 0 → immediate failure
+    // 3) If exit code != 0 → check if maybe running anyway
     if !output.status.success() {
+        let (post_running, _ps_diag) = check_gateway_running_internal(&dir);
+        if post_running {
+            // Container is running despite compose up failing (e.g. pull failed but old container still up)
+            return Ok(GatewayStartResult {
+                gateway_active: true,
+                status: "already_running".to_string(),
+                user_friendly_title: "Gateway Running (with warning)".to_string(),
+                user_friendly_message: "The gateway container is running, but the last start command encountered errors.".to_string(),
+                raw_diagnostics: sanitize_output(&combined_raw),
+                remediation_steps: vec![],
+                compose_file_path: compose_file.display().to_string(),
+                warning: Some(format!("Last start attempt failed: {}", sanitize_output(&stderr))),
+            });
+        }
+        // Not running, actual failure
         let (title, message, steps) = build_remediation(&stderr, &compose_file);
         return Ok(GatewayStartResult {
             gateway_active: false,
+            status: "failed".to_string(),
             user_friendly_title: title,
             user_friendly_message: message,
             raw_diagnostics: sanitize_output(&combined_raw),
             remediation_steps: steps,
             compose_file_path: compose_file.display().to_string(),
+            warning: None,
         });
     }
 
-    // 3) Exit code 0 → verify the container is actually running
-    let (is_running, ps_diag) = check_gateway_running(&dir);
+    // 4) Exit code 0 → verify container is actually running
+    let (is_running, ps_diag) = check_gateway_running_internal(&dir);
 
     if is_running {
         Ok(GatewayStartResult {
             gateway_active: true,
+            status: "started".to_string(),
             user_friendly_title: "Gateway Running".to_string(),
-            user_friendly_message: "OpenClaw Gateway is active.".to_string(),
+            user_friendly_message: "OpenClaw Gateway started successfully.".to_string(),
             raw_diagnostics: sanitize_output(&combined_raw),
             remediation_steps: vec![],
             compose_file_path: compose_file.display().to_string(),
+            warning: None,
         })
     } else {
-        // compose up exited 0 but container is not running (e.g. immediate crash)
         let full_diag = format!("{}\n--- post-start check ---\n{}", combined_raw, ps_diag);
         Ok(GatewayStartResult {
             gateway_active: false,
+            status: "failed".to_string(),
             user_friendly_title: "Gateway Failed to Stay Running".to_string(),
             user_friendly_message: "docker compose up succeeded but the gateway container is not running. It may have crashed on startup.".to_string(),
             raw_diagnostics: sanitize_output(&full_diag),
@@ -208,14 +306,69 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
                 format!("Check the compose file at {} for configuration errors.", compose_file.display()),
             ],
             compose_file_path: compose_file.display().to_string(),
+            warning: None,
         })
     }
 }
 
 #[tauri::command]
+pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
+    // Use docker manifest inspect — does not pull layers, just checks accessibility
+    let output = Command::new("docker")
+        .args(["manifest", "inspect", &image])
+        .output()
+        .map_err(|e| format!("Failed to execute docker: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{}\n{}", stdout, stderr);
+
+    Ok(PullTestResult {
+        accessible: output.status.success(),
+        image,
+        diagnostics: sanitize_output(&combined),
+    })
+}
+
+#[tauri::command]
+pub async fn update_compose_image(app: AppHandle, image: String) -> Result<String, String> {
+    let dir = get_app_data_dir(&app)?;
+    let compose_file = dir.join("docker-compose.yml");
+    let content = generate_compose_content(&image);
+    std::fs::write(&compose_file, content).map_err(|e| e.to_string())?;
+    Ok(compose_file.display().to_string())
+}
+
+#[tauri::command]
+pub async fn open_app_data_folder(app: AppHandle) -> Result<(), String> {
+    let dir = get_app_data_dir(&app)?;
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer")
+            .arg(dir.to_string_lossy().to_string())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(dir.to_string_lossy().to_string())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(dir.to_string_lossy().to_string())
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn stop_gateway(app: AppHandle) -> Result<String, String> {
     let dir = get_app_data_dir(&app)?;
-
     let output = Command::new("docker")
         .current_dir(&dir)
         .args(["compose", "down"])
@@ -226,28 +379,12 @@ pub async fn stop_gateway(app: AppHandle) -> Result<String, String> {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(format!("Docker stop failed: {}", sanitize_output(&stderr)));
     }
-
     Ok("Gateway stopped".to_string())
-}
-
-#[tauri::command]
-pub async fn gateway_status(app: AppHandle) -> Result<String, String> {
-    let dir = get_app_data_dir(&app)?;
-
-    let output = Command::new("docker")
-        .current_dir(&dir)
-        .args(["compose", "ps", "--format", "json"])
-        .output()
-        .map_err(|e| e.to_string())?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(stdout.to_string())
 }
 
 #[tauri::command]
 pub async fn gateway_logs(app: AppHandle) -> Result<String, String> {
     let dir = get_app_data_dir(&app)?;
-
     let output = Command::new("docker")
         .current_dir(&dir)
         .args(["compose", "logs", "--tail", "100"])
@@ -257,7 +394,6 @@ pub async fn gateway_logs(app: AppHandle) -> Result<String, String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}\n{}", stdout, stderr);
-
     Ok(sanitize_output(&combined))
 }
 
@@ -268,7 +404,7 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    // -- sanitize_output tests (existing) --
+    // -- sanitize_output --
 
     #[test]
     fn test_sanitize_output_redacts_api_keys() {
@@ -297,31 +433,7 @@ mod tests {
         assert!(output.contains("Line 3"));
     }
 
-    // -- build_remediation tests (new) --
-
-    #[test]
-    fn test_build_remediation_pull_access_denied() {
-        let stderr = r#"Error response from daemon: pull access denied for openclaw, repository does not exist or may require 'docker login'"#;
-        let compose = PathBuf::from("C:\\Users\\test\\AppData\\Roaming\\ai.openclaw.secureinstaller\\docker-compose.yml");
-        let (title, message, steps) = build_remediation(stderr, &compose);
-
-        assert_eq!(title, "Image Pull Failed");
-        assert!(message.contains("docker-compose.yml"));
-        assert_eq!(steps.len(), 3);
-        assert!(steps[0].contains("fully qualified image name"));
-        assert!(steps[1].contains("docker login"));
-        assert!(steps[2].contains("openclaw:dev"));
-    }
-
-    #[test]
-    fn test_build_remediation_generic_error() {
-        let stderr = "Error: some random docker error occurred";
-        let compose = PathBuf::from("/tmp/docker-compose.yml");
-        let (title, _message, steps) = build_remediation(stderr, &compose);
-
-        assert_eq!(title, "Gateway Start Failed");
-        assert!(steps.iter().any(|s| s.contains("Docker Desktop")));
-    }
+    // -- pull access detection --
 
     #[test]
     fn test_is_pull_access_error_detects_patterns() {
@@ -330,5 +442,91 @@ mod tests {
         assert!(is_pull_access_error("may require 'docker login'"));
         assert!(is_pull_access_error("manifest unknown: manifest unknown"));
         assert!(!is_pull_access_error("port already in use"));
+    }
+
+    // -- build_remediation --
+
+    #[test]
+    fn test_build_remediation_pull_access_denied() {
+        let stderr = r#"Error response from daemon: pull access denied for openclaw, repository does not exist or may require 'docker login'"#;
+        let compose = PathBuf::from("C:\\Users\\test\\AppData\\docker-compose.yml");
+        let (title, _message, steps) = build_remediation(stderr, &compose);
+
+        assert_eq!(title, "Image Pull Failed");
+        assert_eq!(steps.len(), 3);
+        assert!(steps[0].contains("Image Source"));
+        assert!(steps[1].contains("Private Registry"));
+        assert!(steps[2].contains("Local Build"));
+    }
+
+    #[test]
+    fn test_build_remediation_generic_error() {
+        let stderr = "Error: some random docker error occurred";
+        let compose = PathBuf::from("/tmp/docker-compose.yml");
+        let (title, _message, steps) = build_remediation(stderr, &compose);
+        assert_eq!(title, "Gateway Start Failed");
+        assert!(steps.iter().any(|s| s.contains("Docker Desktop")));
+    }
+
+    // -- compose generation --
+
+    #[test]
+    fn test_generate_compose_uses_custom_image() {
+        let content = generate_compose_content("ghcr.io/myorg/gateway:v1.2.3");
+        assert!(content.contains("image: ghcr.io/myorg/gateway:v1.2.3"));
+        assert!(!content.contains("openclaw:latest"));
+    }
+
+    #[test]
+    fn test_generate_compose_uses_local_dev_image() {
+        let content = generate_compose_content("openclaw:dev");
+        assert!(content.contains("image: openclaw:dev"));
+    }
+
+    // -- GatewayStartResult status values --
+
+    #[test]
+    fn test_gateway_result_status_values() {
+        // Verify the struct can represent all 3 states
+        let started = GatewayStartResult {
+            gateway_active: true,
+            status: "started".to_string(),
+            user_friendly_title: "Running".into(),
+            user_friendly_message: "".into(),
+            raw_diagnostics: "".into(),
+            remediation_steps: vec![],
+            compose_file_path: "".into(),
+            warning: None,
+        };
+        assert!(started.gateway_active);
+        assert_eq!(started.status, "started");
+
+        let already = GatewayStartResult {
+            gateway_active: true,
+            status: "already_running".to_string(),
+            user_friendly_title: "Already Running".into(),
+            user_friendly_message: "".into(),
+            raw_diagnostics: "".into(),
+            remediation_steps: vec![],
+            compose_file_path: "".into(),
+            warning: Some("Previous pull failed".into()),
+        };
+        assert!(already.gateway_active);
+        assert_eq!(already.status, "already_running");
+        assert!(already.warning.is_some());
+
+        let failed = GatewayStartResult {
+            gateway_active: false,
+            status: "failed".to_string(),
+            user_friendly_title: "Failed".into(),
+            user_friendly_message: "Image Pull Failed".into(),
+            raw_diagnostics: "pull access denied".into(),
+            remediation_steps: vec!["Fix image".into()],
+            compose_file_path: "".into(),
+            warning: None,
+        };
+        assert!(!failed.gateway_active);
+        assert_eq!(failed.status, "failed");
+        assert!(!failed.remediation_steps.is_empty());
     }
 }

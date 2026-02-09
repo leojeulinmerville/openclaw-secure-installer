@@ -20,8 +20,11 @@ fn main() {
         secrets::has_secret,
         gateway::start_gateway,
         gateway::stop_gateway,
-        gateway::gateway_status,
-        gateway::gateway_logs
+        gateway::is_gateway_running,
+        gateway::gateway_logs,
+        gateway::test_pull_access,
+        gateway::update_compose_image,
+        gateway::open_app_data_folder
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

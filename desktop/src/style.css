@@ -26,6 +26,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  overflow-y: auto;
 }
 
 h1,
@@ -39,6 +40,8 @@ h2 {
   color: var(--text-muted);
   margin-bottom: 1rem;
 }
+
+/* ── Stepper ─────────────────────────────────────────── */
 
 .stepper {
   display: flex;
@@ -61,6 +64,8 @@ h2 {
   display: none !important;
 }
 
+/* ── Cards ───────────────────────────────────────────── */
+
 .card,
 .success-card {
   background-color: var(--card-bg);
@@ -69,6 +74,15 @@ h2 {
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   margin-bottom: 1rem;
 }
+
+.section-title {
+  text-align: left;
+  color: var(--text-main);
+  font-size: 1rem;
+  margin: 0 0 1rem 0;
+}
+
+/* ── Status rows ─────────────────────────────────────── */
 
 .status-row {
   display: flex;
@@ -99,6 +113,8 @@ h2 {
   color: #fff;
 }
 
+/* ── Terminal ────────────────────────────────────────── */
+
 .terminal {
   background: #000;
   color: #00ff00;
@@ -112,11 +128,33 @@ h2 {
   margin-top: 1rem;
 }
 
+.terminal-inline {
+  background: #000;
+  color: #00ff00;
+  font-family: monospace;
+  padding: 0.75rem;
+  border-radius: 4px;
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+  margin-top: 0.5rem;
+}
+
+/* ── Actions / Buttons ───────────────────────────────── */
+
 .actions {
   display: flex;
   gap: 1rem;
   justify-content: center;
   margin-top: 1rem;
+}
+
+.actions-inline {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.5rem;
 }
 
 button {
@@ -148,6 +186,8 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* ── Forms ───────────────────────────────────────────── */
+
 .form-group {
   margin-bottom: 1rem;
   display: flex;
@@ -162,6 +202,43 @@ input {
   background: #0f172a;
   color: white;
 }
+
+/* ── Mode tabs ───────────────────────────────────────── */
+
+.mode-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1rem;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mode-tab {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-tab:first-child {
+  border-radius: 6px 0 0 6px;
+}
+
+.mode-tab:last-child {
+  border-radius: 0 6px 6px 0;
+}
+
+.mode-tab.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+/* ── Error card ──────────────────────────────────────── */
 
 .alert {
   padding: 1rem;
@@ -212,6 +289,27 @@ input {
   line-height: 1.4;
 }
 
+/* ── Warning banner ──────────────────────────────────── */
+
+.warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background-color: rgba(245, 158, 11, 0.15);
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+  color: #fbbf24;
+  font-size: 0.9rem;
+}
+
+.warning-icon {
+  font-size: 1.2rem;
+}
+
+/* ── Utility ─────────────────────────────────────────── */
+
 .text-small {
   font-size: 0.75rem;
 }
@@ -227,4 +325,11 @@ input {
 
 a {
   color: var(--primary-color);
+}
+
+code {
+  background: #0f172a;
+  padding: 0.15rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.85em;
 }
