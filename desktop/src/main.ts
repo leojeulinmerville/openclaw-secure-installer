@@ -22,7 +22,7 @@ type InstallerState = {
 
 type GatewayStartResult = {
   gatewayActive: boolean;
-  status: string; // "started" | "already_running" | "failed" | "not_configured" | "stopped"
+  status: string;
   userFriendlyTitle: string;
   userFriendlyMessage: string;
   rawDiagnostics: string;
@@ -74,6 +74,11 @@ const els = {
   buildStatus: document.getElementById("build-status") as HTMLSpanElement,
   buildLogsBox: document.getElementById("build-logs-box") as HTMLDivElement,
 
+  // Step 3 – Docker Smoke Test
+  btnSmokeTest: document.getElementById("btn-smoke-test") as HTMLButtonElement,
+  smokeStatus: document.getElementById("smoke-status") as HTMLSpanElement,
+  smokeDiagnosticsBox: document.getElementById("smoke-diagnostics-box") as HTMLDivElement,
+
   // Step 3 – Install
   btnStartGateway: document.getElementById("start-gateway") as HTMLButtonElement,
   btnOpenAppData: document.getElementById("btn-open-appdata") as HTMLButtonElement,
@@ -121,16 +126,15 @@ async function init() {
     if (els.installId) els.installId.textContent = `ID: ${currentState.install_id}`;
     if (els.pathDisplay) els.pathDisplay.textContent = currentState.app_data_dir;
 
-    // Pre-fill image from saved state
     if (currentState.gateway_image && els.inputImageName) {
       els.inputImageName.value = currentState.gateway_image;
     }
 
-    // Check if gateway is already running → sync UI
+    // Strict init sync: check if gateway is truly running
     const result = await invoke<GatewayStartResult>("is_gateway_running");
     if (result.gatewayActive) {
       transitionToStep4(result);
-      return; // Skip to Step 4
+      return;
     }
   } catch (err) {
     console.error("Failed to load state:", err);
@@ -264,7 +268,6 @@ async function buildLocally() {
   els.buildLogsBox.classList.remove("hidden");
   els.buildLogsBox.textContent = "Running docker build -t openclaw:dev ...\n";
 
-  // Update compose to use openclaw:dev
   try {
     await invoke("update_compose_image", { image: "openclaw:dev" });
     els.buildLogsBox.textContent += "Compose file updated to use openclaw:dev\n";
@@ -276,6 +279,35 @@ async function buildLocally() {
     els.buildStatus.className = "pill bad";
   } finally {
     els.btnBuildLocal.disabled = false;
+  }
+}
+
+// ── Step 3: Docker Smoke Test ───────────────────────────────────────
+
+async function runSmokeTest() {
+  els.btnSmokeTest.disabled = true;
+  els.smokeStatus.textContent = "Running...";
+  els.smokeStatus.className = "pill neutral";
+  els.smokeDiagnosticsBox.classList.add("hidden");
+
+  try {
+    const result = await invoke<PullTestResult>("docker_smoke_test");
+    if (result.accessible) {
+      els.smokeStatus.textContent = "Docker OK ✓";
+      els.smokeStatus.className = "pill ok";
+    } else {
+      els.smokeStatus.textContent = "Failed ✗";
+      els.smokeStatus.className = "pill bad";
+    }
+    els.smokeDiagnosticsBox.textContent = result.diagnostics;
+    els.smokeDiagnosticsBox.classList.remove("hidden");
+  } catch (err) {
+    els.smokeStatus.textContent = "Error";
+    els.smokeStatus.className = "pill bad";
+    els.smokeDiagnosticsBox.textContent = String(err);
+    els.smokeDiagnosticsBox.classList.remove("hidden");
+  } finally {
+    els.btnSmokeTest.disabled = false;
   }
 }
 
@@ -304,22 +336,26 @@ function showGatewayError(result: GatewayStartResult) {
 }
 
 function transitionToStep4(result: GatewayStartResult) {
-  // Show Step 4
-  showStep(3);
+  // STRICT: only if gatewayActive is true
+  if (!result.gatewayActive) {
+    // Force back to Step 3 with error card
+    showStep(2);
+    showGatewayError(result);
+    return;
+  }
 
-  // Update compose path display
+  showStep(3); // Step 4 (0-indexed)
+
   if (els.composePathDisplay) {
     els.composePathDisplay.textContent = `Compose: ${result.composeFilePath}`;
   }
 
-  // Update status text
   if (result.status === "already_running") {
     els.gatewayActiveStatus.textContent = "✅ OpenClaw Gateway is already running.";
   } else {
     els.gatewayActiveStatus.textContent = "✅ OpenClaw Gateway started successfully.";
   }
 
-  // Warning banner (for "running but pull failed" case)
   if (result.warning) {
     els.gatewayWarning.classList.remove("hidden");
     els.gatewayWarningText.textContent = result.warning;
@@ -329,27 +365,27 @@ function transitionToStep4(result: GatewayStartResult) {
 }
 
 async function startGateway() {
-  // First, update the compose file with the selected image
   const image = getSelectedImage();
-  if (!image) { alert("Please select or enter an image name."); return; }
+  if (!image) { alert("Please select or enter a gateway-compatible image."); return; }
 
   els.btnStartGateway.disabled = true;
-  els.installLogs.textContent = "Updating compose file with selected image...\n";
+  els.installLogs.textContent = "Updating compose with selected image...\n";
   hideGatewayError();
 
   try {
     await invoke("update_compose_image", { image });
-    els.installLogs.textContent += `Image set to: ${image}\n`;
+    els.installLogs.textContent += `Image: ${image}\n`;
     els.installLogs.textContent += "Starting Gateway (docker compose up -d)...\n";
+    els.installLogs.textContent += "Verifying container stability (≈3s)...\n";
 
     const result = await invoke<GatewayStartResult>("start_gateway");
 
     if (result.gatewayActive) {
-      els.installLogs.textContent += `${result.userFriendlyTitle}\n`;
+      els.installLogs.textContent += `✅ ${result.userFriendlyTitle}\n`;
       setTimeout(() => transitionToStep4(result), 800);
     } else {
       // CRITICAL: do NOT transition to Step 4
-      els.installLogs.textContent += `Failed: ${result.userFriendlyTitle}\n`;
+      els.installLogs.textContent += `❌ ${result.userFriendlyTitle}\n`;
       showGatewayError(result);
       els.btnStartGateway.disabled = false;
     }
@@ -366,7 +402,7 @@ async function stopGateway() {
   try {
     const msg = await invoke<string>("stop_gateway");
     alert(msg);
-    showStep(2); // Go back to Step 3
+    showStep(2); // Back to Step 3
   } catch (err) {
     alert("Error: " + err);
   }
@@ -411,6 +447,9 @@ els.modeTabs.forEach(tab => {
 els.btnTestPull?.addEventListener("click", testPullAccess);
 els.btnCopyLogin?.addEventListener("click", copyLoginCommand);
 els.btnBuildLocal?.addEventListener("click", buildLocally);
+
+// Docker smoke test
+els.btnSmokeTest?.addEventListener("click", runSmokeTest);
 
 // ── Initialize ──────────────────────────────────────────────────────
 

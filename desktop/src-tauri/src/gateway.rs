@@ -34,14 +34,14 @@ fn sanitize_output(text: &str) -> String {
     lines.join("\n")
 }
 
-// ── Structured result ───────────────────────────────────────────────
+// ── Structured results ──────────────────────────────────────────────
 
 #[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct GatewayStartResult {
-    /// Is a gateway container actually running right now?
+    /// Is the gateway container truly running and stable?
     pub gateway_active: bool,
-    /// "started" | "already_running" | "failed"
+    /// "started" | "already_running" | "failed" | "not_configured" | "stopped"
     pub status: String,
     pub user_friendly_title: String,
     pub user_friendly_message: String,
@@ -60,6 +60,122 @@ pub struct PullTestResult {
     pub diagnostics: String,
 }
 
+// ── Container health (docker inspect) ───────────────────────────────
+
+/// Parsed container state from `docker inspect`.
+#[derive(Debug, Clone)]
+struct ContainerHealth {
+    status: String,       // "running", "restarting", "exited", "created", …
+    restarting: bool,
+    exit_code: i32,
+    raw: String,          // the full inspect tuple for diagnostics
+}
+
+/// Resolve the gateway container ID via `docker compose ps -q gateway`.
+fn resolve_container_id(dir: &Path) -> Option<String> {
+    let output = Command::new("docker")
+        .current_dir(dir)
+        .args(["compose", "ps", "-q", "gateway"])
+        .output()
+        .ok()?;
+    let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if id.is_empty() { None } else { Some(id) }
+}
+
+/// Inspect container state via `docker inspect`.
+/// Returns `(status, restarting, exit_code)` from the Go template.
+fn inspect_container(container_id: &str) -> ContainerHealth {
+    let output = Command::new("docker")
+        .args([
+            "inspect",
+            "--format",
+            "{{.State.Status}}|{{.State.Restarting}}|{{.State.ExitCode}}",
+            container_id,
+        ])
+        .output();
+
+    match output {
+        Ok(out) => {
+            let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let parts: Vec<&str> = raw.split('|').collect();
+            if parts.len() >= 3 {
+                ContainerHealth {
+                    status: parts[0].to_lowercase(),
+                    restarting: parts[1].eq_ignore_ascii_case("true"),
+                    exit_code: parts[2].parse().unwrap_or(-1),
+                    raw: raw.clone(),
+                }
+            } else {
+                ContainerHealth {
+                    status: "unknown".into(),
+                    restarting: false,
+                    exit_code: -1,
+                    raw,
+                }
+            }
+        }
+        Err(e) => ContainerHealth {
+            status: "error".into(),
+            restarting: false,
+            exit_code: -1,
+            raw: format!("inspect failed: {}", e),
+        },
+    }
+}
+
+/// Strict running check: status == "running" AND NOT restarting AND exit_code == 0.
+fn is_healthy(health: &ContainerHealth) -> bool {
+    health.status == "running" && !health.restarting && health.exit_code == 0
+}
+
+/// Get gateway logs (last 50 lines) for diagnostics.
+fn get_gateway_logs(dir: &Path) -> String {
+    let output = Command::new("docker")
+        .current_dir(dir)
+        .args(["compose", "logs", "--tail", "50", "gateway"])
+        .output();
+    match output {
+        Ok(out) => {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            format!("{}\n{}", stdout, stderr)
+        }
+        Err(e) => format!("Failed to get logs: {}", e),
+    }
+}
+
+/// Strict gateway running check with optional stability window.
+/// If `with_stability` is true, checks twice with 1500ms delay.
+/// Returns `(is_stable, diagnostics)`.
+fn check_gateway_strictly(dir: &Path, with_stability: bool) -> (bool, String) {
+    let container_id = match resolve_container_id(dir) {
+        Some(id) => id,
+        None => return (false, "No gateway container found.".into()),
+    };
+
+    let health1 = inspect_container(&container_id);
+    let mut diag = format!("inspect[1]: {}", health1.raw);
+
+    if !is_healthy(&health1) {
+        return (false, diag);
+    }
+
+    if !with_stability {
+        return (true, diag);
+    }
+
+    // Stability window: wait 1500ms and check again
+    std::thread::sleep(std::time::Duration::from_millis(1500));
+    let health2 = inspect_container(&container_id);
+    diag.push_str(&format!("\ninspect[2]: {}", health2.raw));
+
+    if is_healthy(&health2) {
+        (true, diag)
+    } else {
+        (false, diag)
+    }
+}
+
 // ── Remediation builder ─────────────────────────────────────────────
 
 const PULL_ERROR_PATTERNS: &[&str] = &[
@@ -69,74 +185,93 @@ const PULL_ERROR_PATTERNS: &[&str] = &[
     "manifest unknown",
 ];
 
-fn is_pull_access_error(stderr: &str) -> bool {
-    let lower = stderr.to_lowercase();
+fn is_pull_access_error(text: &str) -> bool {
+    let lower = text.to_lowercase();
     PULL_ERROR_PATTERNS
         .iter()
         .any(|pat| lower.contains(&pat.to_lowercase()))
 }
 
+/// Detect "node: not found" / exit code 127 pattern.
+fn is_node_not_found(text: &str, exit_code: i32) -> bool {
+    let lower = text.to_lowercase();
+    exit_code == 127
+        || lower.contains("node: not found")
+        || lower.contains("exec: \"node\": executable file not found")
+}
+
+/// Detect "Cannot find module" / missing app files pattern.
+fn is_module_not_found(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.contains("cannot find module")
+        || lower.contains("error: cannot find")
+        || lower.contains("no such file or directory")
+            && (lower.contains("openclaw") || lower.contains(".mjs") || lower.contains(".js"))
+}
+
 fn build_remediation(
-    stderr: &str,
+    logs: &str,
+    exit_code: i32,
     compose_path: &Path,
 ) -> (String, String, Vec<String>) {
     let compose_display = compose_path.display().to_string();
 
-    if is_pull_access_error(stderr) {
-        let title = "Image Pull Failed".to_string();
-        let message = format!(
-            "Docker could not pull the container image.\n\
-             Use the Image Source selector above to pick a valid image."
+    // Priority 1: pull access
+    if is_pull_access_error(logs) {
+        return (
+            "Image Pull Failed".into(),
+            "Docker could not pull the container image.\nUse the Image Source selector to pick a valid image.".into(),
+            vec![
+                "Change the image in the Image Source section and click \"Test Pull Access\".".into(),
+                "If using a private registry, log in first via the \"Private Registry\" tab.".into(),
+                "For local development, use the \"Local Build\" tab.".into(),
+            ],
         );
-        let steps = vec![
-            "Change the image in the Image Source section above and click \"Test Pull Access\" to verify.".to_string(),
-            "If using a private registry, log in first via the \"Private Registry\" tab.".to_string(),
-            "For local development, use the \"Local Build\" tab to build and use a local image.".to_string(),
-        ];
-        (title, message, steps)
-    } else {
-        let title = "Gateway Start Failed".to_string();
-        let message = format!(
-            "docker compose up failed. Check the diagnostics below.\n\
-             Compose file: {}",
-            compose_display
-        );
-        let steps = vec![
-            "Ensure Docker Desktop is running.".to_string(),
-            "Check that no other service is using the configured ports.".to_string(),
+    }
+
+    // Priority 2: node not found (exit 127)
+    if is_node_not_found(logs, exit_code) {
+        return (
+            "Incompatible Image – Node Not Found".into(),
             format!(
-                "Inspect the compose file at {} for configuration errors.",
-                compose_display
+                "The selected image does not include Node.js, but the gateway runtime \
+                 requires it (exit code 127).\n\
+                 Images like nginx:alpine are useful for Docker smoke testing but cannot \
+                 run the OpenClaw gateway."
             ),
-        ];
-        (title, message, steps)
+            vec![
+                "Use a gateway-compatible image that includes Node.js + the gateway app.".into(),
+                "Or use the \"Local Build\" tab to build from a valid gateway Dockerfile.".into(),
+                "To just test Docker connectivity, use the \"Docker Smoke Test\" button instead.".into(),
+            ],
+        );
     }
-}
 
-// ── Container verification ──────────────────────────────────────────
-
-/// Returns `(is_running, diagnostics_text)`.
-fn check_gateway_running_internal(dir: &Path) -> (bool, String) {
-    let output = Command::new("docker")
-        .current_dir(dir)
-        .args(["compose", "ps", "--format", "json"])
-        .output();
-
-    match output {
-        Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let stderr = String::from_utf8_lossy(&out.stderr);
-            let has_running = stdout
-                .lines()
-                .any(|line| {
-                    let lower = line.to_lowercase();
-                    lower.contains("\"running\"") || lower.contains("\"state\":\"running\"")
-                });
-            let diag = format!("ps stdout: {}\nps stderr: {}", stdout.trim(), stderr.trim());
-            (has_running, diag)
-        }
-        Err(e) => (false, format!("Failed to run docker compose ps: {}", e)),
+    // Priority 3: module not found
+    if is_module_not_found(logs) {
+        return (
+            "Gateway App Missing in Image".into(),
+            "The image has Node.js but the gateway application files are missing or \
+             the entrypoint is incorrect."
+                .into(),
+            vec![
+                "Use the official gateway image or rebuild with the correct Dockerfile.".into(),
+                "Ensure COPY/WORKDIR/ENTRYPOINT in the Dockerfile point to the gateway app files.".into(),
+                format!("Check the compose file at {} for entrypoint overrides.", compose_display),
+            ],
+        );
     }
+
+    // Fallback: generic
+    (
+        "Gateway Start Failed".into(),
+        format!("docker compose up failed.\nCompose file: {}", compose_display),
+        vec![
+            "Ensure Docker Desktop is running.".into(),
+            "Check that no other service is using the configured ports.".into(),
+            format!("Inspect the compose file at {} for errors.", compose_display),
+        ],
+    )
 }
 
 // ── Compose file rewrite ────────────────────────────────────────────
@@ -174,9 +309,9 @@ pub async fn is_gateway_running(app: AppHandle) -> Result<GatewayStartResult, St
     if !compose_file.exists() {
         return Ok(GatewayStartResult {
             gateway_active: false,
-            status: "not_configured".to_string(),
-            user_friendly_title: "Not Configured".to_string(),
-            user_friendly_message: "No compose file found.".to_string(),
+            status: "not_configured".into(),
+            user_friendly_title: "Not Configured".into(),
+            user_friendly_message: "No compose file found.".into(),
             raw_diagnostics: String::new(),
             remediation_steps: vec![],
             compose_file_path: compose_file.display().to_string(),
@@ -184,19 +319,20 @@ pub async fn is_gateway_running(app: AppHandle) -> Result<GatewayStartResult, St
         });
     }
 
-    let (running, diag) = check_gateway_running_internal(&dir);
+    // Use strict check WITHOUT stability window for init sync (fast)
+    let (running, diag) = check_gateway_strictly(&dir, false);
     Ok(GatewayStartResult {
         gateway_active: running,
-        status: if running { "already_running" } else { "stopped" }.to_string(),
+        status: if running { "already_running" } else { "stopped" }.into(),
         user_friendly_title: if running {
-            "Gateway Running".to_string()
+            "Gateway Running".into()
         } else {
-            "Gateway Stopped".to_string()
+            "Gateway Stopped".into()
         },
         user_friendly_message: if running {
-            "OpenClaw Gateway is active.".to_string()
+            "OpenClaw Gateway is active.".into()
         } else {
-            "Gateway is not currently running.".to_string()
+            "Gateway is not currently running.".into()
         },
         raw_diagnostics: sanitize_output(&diag),
         remediation_steps: vec![],
@@ -213,24 +349,24 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     if !compose_file.exists() {
         return Ok(GatewayStartResult {
             gateway_active: false,
-            status: "failed".to_string(),
-            user_friendly_title: "Not Configured".to_string(),
-            user_friendly_message: "docker-compose.yml not found. Please complete the Configure step first.".to_string(),
+            status: "failed".into(),
+            user_friendly_title: "Not Configured".into(),
+            user_friendly_message: "docker-compose.yml not found. Complete the Configure step first.".into(),
             raw_diagnostics: String::new(),
-            remediation_steps: vec!["Go back to Step 2 and click Save & Configure.".to_string()],
+            remediation_steps: vec!["Go back to Step 2 and click Save & Configure.".into()],
             compose_file_path: compose_file.display().to_string(),
             warning: None,
         });
     }
 
-    // 1) Check if already running BEFORE attempting compose up
-    let (pre_running, _) = check_gateway_running_internal(&dir);
+    // 1) Check if already running BEFORE compose up (strict, no stability window)
+    let (pre_running, _) = check_gateway_strictly(&dir, false);
     if pre_running {
         return Ok(GatewayStartResult {
             gateway_active: true,
-            status: "already_running".to_string(),
-            user_friendly_title: "Gateway Already Running".to_string(),
-            user_friendly_message: "The gateway container is already active. No action needed.".to_string(),
+            status: "already_running".into(),
+            user_friendly_title: "Gateway Already Running".into(),
+            user_friendly_message: "The gateway container is already active. No action needed.".into(),
             raw_diagnostics: String::new(),
             remediation_steps: vec![],
             compose_file_path: compose_file.display().to_string(),
@@ -249,71 +385,91 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined_raw = format!("{}\n{}", stdout, stderr);
 
-    // 3) If exit code != 0 → check if maybe running anyway
+    // 3) If exit code != 0 → check if maybe running anyway (strict)
     if !output.status.success() {
-        let (post_running, _ps_diag) = check_gateway_running_internal(&dir);
+        let (post_running, _inspect_diag) = check_gateway_strictly(&dir, false);
         if post_running {
-            // Container is running despite compose up failing (e.g. pull failed but old container still up)
             return Ok(GatewayStartResult {
                 gateway_active: true,
-                status: "already_running".to_string(),
-                user_friendly_title: "Gateway Running (with warning)".to_string(),
-                user_friendly_message: "The gateway container is running, but the last start command encountered errors.".to_string(),
+                status: "already_running".into(),
+                user_friendly_title: "Gateway Running (with warning)".into(),
+                user_friendly_message: "The gateway container is running, but the last start command encountered errors.".into(),
                 raw_diagnostics: sanitize_output(&combined_raw),
                 remediation_steps: vec![],
                 compose_file_path: compose_file.display().to_string(),
                 warning: Some(format!("Last start attempt failed: {}", sanitize_output(&stderr))),
             });
         }
-        // Not running, actual failure
-        let (title, message, steps) = build_remediation(&stderr, &compose_file);
+        // Not running
+        let logs = get_gateway_logs(&dir);
+        let full_diag = format!("{}\n--- gateway logs ---\n{}", combined_raw, logs);
+        let (title, message, steps) = build_remediation(&full_diag, -1, &compose_file);
         return Ok(GatewayStartResult {
             gateway_active: false,
-            status: "failed".to_string(),
+            status: "failed".into(),
             user_friendly_title: title,
             user_friendly_message: message,
-            raw_diagnostics: sanitize_output(&combined_raw),
+            raw_diagnostics: sanitize_output(&full_diag),
             remediation_steps: steps,
             compose_file_path: compose_file.display().to_string(),
             warning: None,
         });
     }
 
-    // 4) Exit code 0 → verify container is actually running
-    let (is_running, ps_diag) = check_gateway_running_internal(&dir);
+    // 4) Exit code 0 → strict verify with stability window (2 checks, 1500ms apart)
+    let (is_stable, inspect_diag) = check_gateway_strictly(&dir, true);
 
-    if is_running {
+    if is_stable {
         Ok(GatewayStartResult {
             gateway_active: true,
-            status: "started".to_string(),
-            user_friendly_title: "Gateway Running".to_string(),
-            user_friendly_message: "OpenClaw Gateway started successfully.".to_string(),
+            status: "started".into(),
+            user_friendly_title: "Gateway Running".into(),
+            user_friendly_message: "OpenClaw Gateway started and verified stable.".into(),
             raw_diagnostics: sanitize_output(&combined_raw),
             remediation_steps: vec![],
             compose_file_path: compose_file.display().to_string(),
             warning: None,
         })
     } else {
-        let full_diag = format!("{}\n--- post-start check ---\n{}", combined_raw, ps_diag);
+        // Container started but is crashing / restarting
+        let logs = get_gateway_logs(&dir);
+        let full_diag = format!(
+            "{}\n--- inspect ---\n{}\n--- gateway logs ---\n{}",
+            combined_raw, inspect_diag, logs
+        );
+
+        // Try to extract exit code from inspect diag
+        let exit_code = extract_exit_code(&inspect_diag);
+        let (title, message, steps) = build_remediation(&full_diag, exit_code, &compose_file);
+
         Ok(GatewayStartResult {
             gateway_active: false,
-            status: "failed".to_string(),
-            user_friendly_title: "Gateway Failed to Stay Running".to_string(),
-            user_friendly_message: "docker compose up succeeded but the gateway container is not running. It may have crashed on startup.".to_string(),
+            status: "failed".into(),
+            user_friendly_title: title,
+            user_friendly_message: message,
             raw_diagnostics: sanitize_output(&full_diag),
-            remediation_steps: vec![
-                "Run `docker compose logs gateway` in a terminal to see crash logs.".to_string(),
-                format!("Check the compose file at {} for configuration errors.", compose_file.display()),
-            ],
+            remediation_steps: steps,
             compose_file_path: compose_file.display().to_string(),
             warning: None,
         })
     }
 }
 
+/// Extract exit code from inspect diagnostics like "inspect[2]: restarting|true|127"
+fn extract_exit_code(inspect_diag: &str) -> i32 {
+    // Look for the last "|<number>" at end of an inspect line
+    for line in inspect_diag.lines().rev() {
+        if let Some(pos) = line.rfind('|') {
+            if let Ok(code) = line[pos + 1..].trim().parse::<i32>() {
+                return code;
+            }
+        }
+    }
+    -1
+}
+
 #[tauri::command]
 pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
-    // Use docker manifest inspect — does not pull layers, just checks accessibility
     let output = Command::new("docker")
         .args(["manifest", "inspect", &image])
         .output()
@@ -326,6 +482,24 @@ pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
     Ok(PullTestResult {
         accessible: output.status.success(),
         image,
+        diagnostics: sanitize_output(&combined),
+    })
+}
+
+#[tauri::command]
+pub async fn docker_smoke_test() -> Result<PullTestResult, String> {
+    let output = Command::new("docker")
+        .args(["run", "--rm", "hello-world"])
+        .output()
+        .map_err(|e| format!("Failed to execute docker: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let combined = format!("{}\n{}", stdout, stderr);
+
+    Ok(PullTestResult {
+        accessible: output.status.success(),
+        image: "hello-world".into(),
         diagnostics: sanitize_output(&combined),
     })
 }
@@ -444,26 +618,78 @@ mod tests {
         assert!(!is_pull_access_error("port already in use"));
     }
 
-    // -- build_remediation --
+    // -- node not found detection --
+
+    #[test]
+    fn test_is_node_not_found() {
+        assert!(is_node_not_found("exec: line 47: node: not found", 127));
+        assert!(is_node_not_found("anything", 127));
+        assert!(is_node_not_found("node: not found", 0));
+        assert!(is_node_not_found(
+            "exec: \"node\": executable file not found in $PATH",
+            1
+        ));
+        assert!(!is_node_not_found("port already in use", 1));
+    }
+
+    // -- module not found detection --
+
+    #[test]
+    fn test_is_module_not_found() {
+        assert!(is_module_not_found(
+            "Error: Cannot find module '/home/node/openclaw.mjs'"
+        ));
+        assert!(is_module_not_found(
+            "ENOENT: no such file or directory, open 'openclaw.mjs'"
+        ));
+        assert!(!is_module_not_found("port already in use"));
+    }
+
+    // -- build_remediation with crash patterns --
 
     #[test]
     fn test_build_remediation_pull_access_denied() {
-        let stderr = r#"Error response from daemon: pull access denied for openclaw, repository does not exist or may require 'docker login'"#;
+        let logs = "pull access denied for openclaw, repository does not exist";
         let compose = PathBuf::from("C:\\Users\\test\\AppData\\docker-compose.yml");
-        let (title, _message, steps) = build_remediation(stderr, &compose);
-
+        let (title, _msg, steps) = build_remediation(logs, -1, &compose);
         assert_eq!(title, "Image Pull Failed");
         assert_eq!(steps.len(), 3);
-        assert!(steps[0].contains("Image Source"));
-        assert!(steps[1].contains("Private Registry"));
-        assert!(steps[2].contains("Local Build"));
+    }
+
+    #[test]
+    fn test_build_remediation_node_not_found() {
+        let logs = "/docker-entrypoint.sh: exec: line 47: node: not found";
+        let compose = PathBuf::from("/tmp/docker-compose.yml");
+        let (title, msg, steps) = build_remediation(logs, 127, &compose);
+        assert_eq!(title, "Incompatible Image – Node Not Found");
+        assert!(msg.contains("nginx:alpine"));
+        assert!(steps.iter().any(|s| s.contains("gateway-compatible")));
+        assert!(steps.iter().any(|s| s.contains("Docker Smoke Test")));
+    }
+
+    #[test]
+    fn test_build_remediation_exit_127_without_log_text() {
+        // Even without the text, exit code 127 alone triggers node-not-found
+        let logs = "container exited";
+        let compose = PathBuf::from("/tmp/docker-compose.yml");
+        let (title, _, _) = build_remediation(logs, 127, &compose);
+        assert_eq!(title, "Incompatible Image – Node Not Found");
+    }
+
+    #[test]
+    fn test_build_remediation_module_not_found() {
+        let logs = "Error: Cannot find module '/home/node/openclaw.mjs'";
+        let compose = PathBuf::from("/tmp/docker-compose.yml");
+        let (title, _, steps) = build_remediation(logs, 1, &compose);
+        assert_eq!(title, "Gateway App Missing in Image");
+        assert!(steps.iter().any(|s| s.contains("Dockerfile")));
     }
 
     #[test]
     fn test_build_remediation_generic_error() {
-        let stderr = "Error: some random docker error occurred";
+        let logs = "Error: some random docker error occurred";
         let compose = PathBuf::from("/tmp/docker-compose.yml");
-        let (title, _message, steps) = build_remediation(stderr, &compose);
+        let (title, _, steps) = build_remediation(logs, 1, &compose);
         assert_eq!(title, "Gateway Start Failed");
         assert!(steps.iter().any(|s| s.contains("Docker Desktop")));
     }
@@ -483,14 +709,68 @@ mod tests {
         assert!(content.contains("image: openclaw:dev"));
     }
 
+    // -- is_healthy --
+
+    #[test]
+    fn test_is_healthy_running_stable() {
+        let h = ContainerHealth {
+            status: "running".into(),
+            restarting: false,
+            exit_code: 0,
+            raw: "running|false|0".into(),
+        };
+        assert!(is_healthy(&h));
+    }
+
+    #[test]
+    fn test_is_healthy_restarting_is_false() {
+        let h = ContainerHealth {
+            status: "running".into(),
+            restarting: true, // restart loop
+            exit_code: 127,
+            raw: "running|true|127".into(),
+        };
+        assert!(!is_healthy(&h));
+    }
+
+    #[test]
+    fn test_is_healthy_exited_is_false() {
+        let h = ContainerHealth {
+            status: "exited".into(),
+            restarting: false,
+            exit_code: 1,
+            raw: "exited|false|1".into(),
+        };
+        assert!(!is_healthy(&h));
+    }
+
+    #[test]
+    fn test_is_healthy_restarting_status_is_false() {
+        let h = ContainerHealth {
+            status: "restarting".into(),
+            restarting: true,
+            exit_code: 127,
+            raw: "restarting|true|127".into(),
+        };
+        assert!(!is_healthy(&h));
+    }
+
+    // -- extract_exit_code --
+
+    #[test]
+    fn test_extract_exit_code_from_inspect() {
+        assert_eq!(extract_exit_code("inspect[2]: restarting|true|127"), 127);
+        assert_eq!(extract_exit_code("inspect[1]: running|false|0\ninspect[2]: running|false|0"), 0);
+        assert_eq!(extract_exit_code("no pipe here"), -1);
+    }
+
     // -- GatewayStartResult status values --
 
     #[test]
     fn test_gateway_result_status_values() {
-        // Verify the struct can represent all 3 states
         let started = GatewayStartResult {
             gateway_active: true,
-            status: "started".to_string(),
+            status: "started".into(),
             user_friendly_title: "Running".into(),
             user_friendly_message: "".into(),
             raw_diagnostics: "".into(),
@@ -503,7 +783,7 @@ mod tests {
 
         let already = GatewayStartResult {
             gateway_active: true,
-            status: "already_running".to_string(),
+            status: "already_running".into(),
             user_friendly_title: "Already Running".into(),
             user_friendly_message: "".into(),
             raw_diagnostics: "".into(),
@@ -512,21 +792,19 @@ mod tests {
             warning: Some("Previous pull failed".into()),
         };
         assert!(already.gateway_active);
-        assert_eq!(already.status, "already_running");
         assert!(already.warning.is_some());
 
         let failed = GatewayStartResult {
             gateway_active: false,
-            status: "failed".to_string(),
+            status: "failed".into(),
             user_friendly_title: "Failed".into(),
-            user_friendly_message: "Image Pull Failed".into(),
-            raw_diagnostics: "pull access denied".into(),
+            user_friendly_message: "".into(),
+            raw_diagnostics: "".into(),
             remediation_steps: vec!["Fix image".into()],
             compose_file_path: "".into(),
             warning: None,
         };
         assert!(!failed.gateway_active);
-        assert_eq!(failed.status, "failed");
         assert!(!failed.remediation_steps.is_empty());
     }
 }

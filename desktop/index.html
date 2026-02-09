@@ -91,9 +91,13 @@
     <div id="step-3" class="step-content hidden">
       <h2>Installation</h2>
 
-      <!-- Image Source Selection -->
+      <!-- Gateway Runtime Image Selection -->
       <div class="card">
-        <h3 class="section-title">Gateway Image Source</h3>
+        <h3 class="section-title">Gateway Runtime Image</h3>
+        <p class="text-small text-muted" style="margin-top:-0.5rem; margin-bottom:1rem;">
+          Select an image that contains the OpenClaw gateway runtime (Node.js + gateway app).
+          <strong>Do not use generic images</strong> (e.g. nginx, alpine) here — they cannot run the gateway.
+        </p>
 
         <div class="mode-tabs">
           <button class="mode-tab active" data-mode="public">Public Image</button>
@@ -148,6 +152,24 @@
         </div>
       </div>
 
+      <!-- Docker Smoke Test (independent of gateway image) -->
+      <div class="card" style="border: 1px dashed #334155;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <h3 class="section-title" style="margin:0;">Docker Smoke Test</h3>
+            <p class="text-small text-muted" style="margin:0.25rem 0 0;">
+              Runs <code>docker run hello-world</code> to verify Docker can pull &amp; run containers.
+              <strong>Does not affect gateway settings.</strong>
+            </p>
+          </div>
+          <div class="actions-inline" style="margin:0;">
+            <button id="btn-smoke-test" class="secondary">Run Test</button>
+            <span id="smoke-status" class="pill neutral">Not tested</span>
+          </div>
+        </div>
+        <div id="smoke-diagnostics-box" class="terminal-inline hidden"></div>
+      </div>
+
       <!-- Install logs -->
       <div class="terminal" id="install-logs">Waiting to start...</div>
 
@@ -175,7 +197,7 @@
     <div id="step-4" class="step-content hidden">
       <h2>Gateway Running</h2>
 
-      <!-- Warning banner for "already running but pull failed" -->
+      <!-- Warning banner for "already running but issues" -->
       <div id="gateway-warning" class="warning-banner hidden">
         <span class="warning-icon">⚠️</span>
         <span id="gateway-warning-text"></span>
