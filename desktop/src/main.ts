@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 
+// Types
 type CheckDockerResult = {
   dockerCliFound: boolean;
   dockerCliVersion?: string | null;
@@ -11,125 +12,155 @@ type CheckDockerResult = {
   remediation?: string | null;
 };
 
-type UiState = "idle" | "running" | "success" | "error";
+type InstallerState = {
+  install_id: string;
+  status: string;
+  app_data_dir: string;
+};
 
-const button = document.querySelector<HTMLButtonElement>("#check-docker");
-const stateTag = document.querySelector<HTMLSpanElement>("#check-state");
-const statusCli = document.querySelector<HTMLSpanElement>("#status-cli");
-const statusDaemon = document.querySelector<HTMLSpanElement>("#status-daemon");
-const statusCompose = document.querySelector<HTMLSpanElement>("#status-compose");
-const versionCli = document.querySelector<HTMLSpanElement>("#version-cli");
-const versionServer = document.querySelector<HTMLSpanElement>("#version-server");
-const versionCompose = document.querySelector<HTMLSpanElement>("#version-compose");
-const remediation = document.querySelector<HTMLDivElement>("#remediation");
-const diagnosticsPanel = document.querySelector<HTMLDetailsElement>("#diagnostics-panel");
-const diagnosticsList = document.querySelector<HTMLUListElement>("#diagnostics");
-const lastCheck = document.querySelector<HTMLParagraphElement>("#last-check");
+// UI Elements
+const els = {
+  steps: [1, 2, 3, 4].map(i => document.getElementById(`step-${i}`) as HTMLDivElement),
+  indicators: [1, 2, 3, 4].map(i => document.getElementById(`step-${i}-indicator`) as HTMLDivElement),
+  
+  // Step 1
+  btnCheck: document.getElementById("check-docker") as HTMLButtonElement,
+  btnStep1Next: document.getElementById("step-1-next") as HTMLButtonElement,
+  statusCli: document.getElementById("status-cli") as HTMLSpanElement,
+  statusDaemon: document.getElementById("status-daemon") as HTMLSpanElement,
+  statusCompose: document.getElementById("status-compose") as HTMLSpanElement,
+  
+  // Step 2
+  btnStep2Next: document.getElementById("step-2-next") as HTMLButtonElement,
+  inputHttp: document.getElementById("http-port") as HTMLInputElement,
+  inputHttps: document.getElementById("https-port") as HTMLInputElement,
+  pathDisplay: document.getElementById("app-data-path") as HTMLDivElement,
 
-function setState(state: UiState) {
-  if (!stateTag || !button) {
-    return;
-  }
-  const label = state === "idle" ? "Idle" : state === "running" ? "Running" : state;
-  stateTag.textContent = label;
-  stateTag.className = `state-tag ${state}`;
-  button.disabled = state === "running";
-  button.textContent = state === "running" ? "Checking..." : "Check Docker";
-}
+  // Step 3
+  btnStartGateway: document.getElementById("start-gateway") as HTMLButtonElement,
+  installLogs: document.getElementById("install-logs") as HTMLDivElement,
 
-function setPill(el: HTMLSpanElement | null, state: "ok" | "bad" | "neutral", text: string) {
-  if (!el) {
-    return;
-  }
-  el.textContent = text;
-  el.className = `pill ${state}`;
-}
+  // Step 4
+  btnStopGateway: document.getElementById("stop-gateway") as HTMLButtonElement,
+  btnViewLogs: document.getElementById("view-logs") as HTMLButtonElement,
+  runtimeLogs: document.getElementById("runtime-logs") as HTMLDivElement,
+  installId: document.getElementById("install-id") as HTMLParagraphElement,
+};
 
-function setVersion(el: HTMLSpanElement | null, version: string | null | undefined) {
-  if (!el) {
-    return;
-  }
-  el.textContent = version ? `Version: ${version}` : "";
-}
+let currentState: InstallerState | null = null;
 
-function setRemediation(message: string | null | undefined) {
-  if (!remediation) {
-    return;
-  }
-  if (!message) {
-    remediation.textContent = "";
-    remediation.classList.add("hidden");
-    return;
-  }
-  remediation.textContent = message;
-  remediation.classList.remove("hidden");
-}
-
-function setDiagnostics(items: string[]) {
-  if (!diagnosticsPanel || !diagnosticsList) {
-    return;
-  }
-  diagnosticsList.innerHTML = "";
-  if (items.length === 0) {
-    diagnosticsPanel.classList.add("hidden");
-    return;
-  }
-  for (const item of items) {
-    const li = document.createElement("li");
-    li.textContent = item;
-    diagnosticsList.appendChild(li);
-  }
-  diagnosticsPanel.classList.remove("hidden");
-}
-
-function renderResult(result: CheckDockerResult) {
-  const cliOk = result.dockerCliFound;
-  const daemonOk = result.dockerDaemonReachable;
-  const composeOk = result.composeV2Available;
-
-  setPill(statusCli, cliOk ? "ok" : "bad", cliOk ? "OK" : "KO");
-  setPill(
-    statusDaemon,
-    cliOk ? (daemonOk ? "ok" : "bad") : "neutral",
-    cliOk ? (daemonOk ? "OK" : "KO") : "N/A",
-  );
-  setPill(
-    statusCompose,
-    cliOk ? (composeOk ? "ok" : "bad") : "neutral",
-    cliOk ? (composeOk ? "OK" : "KO") : "N/A",
-  );
-
-  setVersion(versionCli, result.dockerCliVersion);
-  setVersion(versionServer, result.dockerServerVersion);
-  setVersion(versionCompose, result.composeVersion);
-  setRemediation(result.remediation);
-  setDiagnostics(result.diagnostics || []);
-  if (lastCheck) {
-    lastCheck.textContent = `Derniere verification: ${new Date().toLocaleTimeString()}`;
-  }
-}
-
-async function runCheck() {
-  setState("running");
-  setRemediation(null);
-  setDiagnostics([]);
-
-  try {
-    const result = await invoke<CheckDockerResult>("check_docker");
-    renderResult(result);
-    if (!result.dockerCliFound) {
-      setState("error");
-    } else {
-      setState("success");
-    }
-  } catch {
-    setState("error");
-    setRemediation("Echec de la verification. Reessayez.");
-  }
-}
-
-if (button) {
-  button.addEventListener("click", () => {
-    void runCheck();
+// Navigation
+function showStep(stepIndex: number) { // 0-based
+  els.steps.forEach((el, i) => {
+    if (i === stepIndex) el.classList.remove("hidden");
+    else el.classList.add("hidden");
+  });
+  els.indicators.forEach((el, i) => {
+    if (i === stepIndex) el.classList.add("active");
+    else el.classList.remove("active");
   });
 }
+
+// Logic
+async function init() {
+  try {
+    currentState = await invoke<InstallerState>("get_state");
+    if (els.installId) els.installId.textContent = `ID: ${currentState.install_id}`;
+    if (els.pathDisplay) els.pathDisplay.textContent = currentState.app_data_dir;
+    
+    // Resume state logic could go here (if status == "running", jump to step 4)
+  } catch (err) {
+    console.error("Failed to load state:", err);
+  }
+}
+
+// Step 1: Docker Check
+async function runCheck() {
+  els.btnCheck.disabled = true;
+  els.btnCheck.textContent = "Checking...";
+  
+  try {
+    const result = await invoke<CheckDockerResult>("check_docker");
+    
+    // Update pills
+    updatePill(els.statusCli, result.dockerCliFound);
+    updatePill(els.statusDaemon, result.dockerDaemonReachable);
+    updatePill(els.statusCompose, result.composeV2Available);
+
+    if (result.dockerCliFound && result.dockerDaemonReachable && result.composeV2Available) {
+      els.btnStep1Next.classList.remove("hidden");
+    } else {
+        alert("Docker requirements not met. Check diagnostics.");
+    }
+  } catch (error) {
+    console.error(error);
+    alert("Check failed: " + error);
+  } finally {
+    els.btnCheck.disabled = false;
+    els.btnCheck.textContent = "Check System";
+  }
+}
+
+function updatePill(el: HTMLElement, ok: boolean) {
+  el.textContent = ok ? "OK" : "KO";
+  el.className = `pill ${ok ? "ok" : "bad"}`;
+}
+
+// Step 2: Configure
+async function saveConfiguration() {
+  const httpPort = parseInt(els.inputHttp.value) || 80;
+  const httpsPort = parseInt(els.inputHttps.value) || 443;
+  
+  try {
+    await invoke("configure_installation", { httpPort, httpsPort });
+    showStep(2); // Go to Step 3
+  } catch (err) {
+    alert("Configuration failed: " + err);
+  }
+}
+
+// Step 3: Install/Start
+async function startGateway() {
+  els.btnStartGateway.disabled = true;
+  els.installLogs.textContent = "Starting Gateway (docker compose up -d)...\n";
+  
+  try {
+    const msg = await invoke<string>("start_gateway");
+    els.installLogs.textContent += msg + "\nDone.";
+    setTimeout(() => showStep(3), 1000); // Go to Step 4
+  } catch (err) {
+    els.installLogs.textContent += "\nError: " + err;
+    els.btnStartGateway.disabled = false;
+  }
+}
+
+// Step 4: Manage
+async function stopGateway() {
+    if (!confirm("Stop Gateway?")) return;
+    try {
+        const msg = await invoke<string>("stop_gateway");
+        alert(msg);
+    } catch (err) {
+        alert("Error: " + err);
+    }
+}
+
+async function viewLogs() {
+    els.runtimeLogs.classList.toggle("hidden");
+    if (!els.runtimeLogs.classList.contains("hidden")) {
+        const logs = await invoke<string>("gateway_logs");
+        els.runtimeLogs.textContent = logs;
+    }
+}
+
+// Event Listeners
+els.btnCheck?.addEventListener("click", runCheck);
+els.btnStep1Next?.addEventListener("click", () => showStep(1));
+els.btnStep2Next?.addEventListener("click", saveConfiguration);
+els.btnStartGateway?.addEventListener("click", startGateway);
+els.btnStopGateway?.addEventListener("click", stopGateway);
+els.btnViewLogs?.addEventListener("click", viewLogs);
+
+// Initialize
+init();
+showStep(0);

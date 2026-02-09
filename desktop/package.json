@@ -14,7 +14,13 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.0"
+    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/plugin-fs": "^2.4.5",
+    "@tauri-apps/plugin-os": "^2.3.2",
+    "@tauri-apps/plugin-shell": "^2.3.5",
+    "@tauri-apps/plugin-store": "^2.4.2",
+    "chrono": "^1.0.5",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0",
