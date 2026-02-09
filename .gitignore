@@ -78,3 +78,7 @@ USER.md
 memory/
 .agent/*.json
 !.agent/workflows/
+
+# Tauri desktop generated files
+desktop/src-tauri/gen/
+desktop/src-tauri/target/
