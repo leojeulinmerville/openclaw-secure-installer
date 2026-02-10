@@ -260,6 +260,7 @@ async function testPullAccess() {
   els.btnTestPull.disabled = true;
   els.pullStatus.textContent = "Testing...";
   els.pullStatus.className = "pill neutral";
+  // Always HIDE previous diagnostics initially
   els.pullDiagnosticsBox.classList.add("hidden");
 
   try {
@@ -271,8 +272,18 @@ async function testPullAccess() {
 
       if (result.warning) {
         // Show warning but keep accessible status
+        // Use a less scary style for the warning (simple appended text, not the box if possible, or style the box)
+        // Here we reuse the box but prepend an icon and ensure it's not red (handled by specific styling if present, or just text)
+        // Actually, let's look for a dedicated warning element or just append to status if short?
+        // Reuse path: show in box but make it look informational
         els.pullDiagnosticsBox.textContent = "⚠️ " + result.warning;
         els.pullDiagnosticsBox.classList.remove("hidden");
+        // Ensure it doesn't look like an error (no red border if CSS targets 'box')
+        // We might need to adjust CSS or just rely on the text content being clear.
+      } else {
+        // Success and NO warning -> strictly HIDE any diagnostics/logs to avoid confusion
+        els.pullDiagnosticsBox.textContent = "";
+        els.pullDiagnosticsBox.classList.add("hidden");
       }
     } else {
       els.pullStatus.textContent = "Not accessible ✗";

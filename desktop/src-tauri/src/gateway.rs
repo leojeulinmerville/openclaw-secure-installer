@@ -599,7 +599,39 @@ fn extract_exit_code(inspect_diag: &str) -> i32 {
 
 #[tauri::command]
 pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
-    // 1. Try manifest inspect first (fastest)
+    // 1. GHCR Special Handling: Direct Pull (skip manifest)
+    // Manifest inspect on GHCR often returns 401/403 for public images if not logged in.
+    // To avoid false negatives, we go straight to "docker pull" for ghcr.io images.
+    let image_lower = image.to_lowercase();
+    if image_lower.starts_with("ghcr.io/") || image_lower.contains("/ghcr.io/") {
+        let pull_output = Command::new("docker")
+            .args(["pull", &image])
+            .output()
+            .map_err(|e| format!("Failed to execute docker pull: {}", e))?;
+
+        let stdout = String::from_utf8_lossy(&pull_output.stdout);
+        let stderr = String::from_utf8_lossy(&pull_output.stderr);
+        let combined = format!("{}\n{}", stdout, stderr);
+
+        if pull_output.status.success() {
+             return Ok(PullTestResult {
+                accessible: true,
+                image,
+                diagnostics: sanitize_output(&combined),
+                warning: Some("Used direct pull for GHCR compatibility.".to_string()),
+            });
+        }
+        
+        // If pull failed, return failure
+        return Ok(PullTestResult {
+            accessible: false,
+            image,
+            diagnostics: sanitize_output(&combined),
+            warning: None,
+        });
+    }
+
+    // 2. Standard Logic: Manifest first (faster)
     let output = Command::new("docker")
         .args(["manifest", "inspect", &image])
         .output()
@@ -618,10 +650,10 @@ pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
         });
     }
 
-    // 2. If manifest failed, check if it looks like an auth/permission error
-    if should_try_pull_fallback(&stderr) {
+    // 3. Fallback: Check if manifest failure looks like auth/permission error
+    // Combine stdout/stderr because Windows Docker sometimes puts error text in stdout
+    if should_try_pull_fallback(&combined) {
         // Fallback: try actual docker pull
-        // This handles cases where manifest inspect is denied but pull is allowed (common in GHCR public packages)
         let pull_output = Command::new("docker")
             .args(["pull", &image])
             .output()
@@ -650,13 +682,17 @@ pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
     })
 }
 
-fn should_try_pull_fallback(stderr: &str) -> bool {
-    let lower = stderr.to_lowercase();
+fn should_try_pull_fallback(output: &str) -> bool {
+    let lower = output.to_lowercase();
     lower.contains("unauthorized")
         || lower.contains("authentication required")
         || lower.contains("denied")
         || lower.contains("no access")
         || lower.contains("forbidden")
+        || lower.contains("insufficient_scope")
+        || lower.contains("access denied")
+        || lower.contains("401")
+        || lower.contains("403")
 }
 
 #[tauri::command]
@@ -1062,7 +1098,10 @@ mod tests {
         assert!(should_try_pull_fallback("status: 403 forbidden"));
         assert!(should_try_pull_fallback("access denied"));
         assert!(should_try_pull_fallback("no access to this resource"));
-        
+        assert!(should_try_pull_fallback("insufficient_scope"));
+        assert!(should_try_pull_fallback("requested access to the resource is denied"));
+        assert!(should_try_pull_fallback("error code: 401"));
+
         assert!(!should_try_pull_fallback("image not found"));
         assert!(!should_try_pull_fallback("connection refused"));
         assert!(!should_try_pull_fallback("manifest unknown"));
