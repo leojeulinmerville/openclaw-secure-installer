@@ -24,7 +24,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["msi", "nsis"],
+    "publisher": "OpenClaw AI",
+    "shortDescription": "Install and manage the OpenClaw Gateway via Docker",
+    "windows": {
+      "certificateThumbprint": null,
+      "timestampUrl": ""
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

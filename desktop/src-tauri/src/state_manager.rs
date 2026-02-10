@@ -5,7 +5,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::gateway::generate_compose_content;
 
-pub const DEFAULT_GATEWAY_IMAGE: &str = "ghcr.io/openclaw-ai/openclaw-gateway:stable";
+pub const DEFAULT_GATEWAY_IMAGE: &str = "ghcr.io/leojeulinmerville/openclaw-gateway:stable";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct InstallerState {

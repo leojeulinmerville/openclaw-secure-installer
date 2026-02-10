@@ -122,7 +122,7 @@ let currentImageMode: "public" | "private" | "local" = "public";
 
 // ─── Source of truth: the runtime image that will be used by Start Gateway.
 //     Updated by: init() from state.json, Local Build success, user editing input fields.
-let activeRuntimeImage = "ghcr.io/openclaw-ai/openclaw-gateway:stable";
+let activeRuntimeImage = "ghcr.io/leojeulinmerville/openclaw-gateway:stable";
 
 // ── Navigation ──────────────────────────────────────────────────────
 
@@ -228,7 +228,7 @@ async function saveConfiguration() {
 function readSelectedImage(): string {
   switch (currentImageMode) {
     case "public":
-      return els.inputImageName.value.trim() || "ghcr.io/openclaw-ai/openclaw-gateway:stable";
+      return els.inputImageName.value.trim() || "ghcr.io/leojeulinmerville/openclaw-gateway:stable";
     case "private": {
       const registry = els.inputRegistryUrl.value.trim();
       const img = els.inputPrivateImageName.value.trim();

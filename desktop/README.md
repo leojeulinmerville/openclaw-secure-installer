@@ -33,7 +33,7 @@ A minimal reference gateway is included in the `gateway/` directory of this repo
 
 | Mode | Description |
 |------|-------------|
-| **Public Image** | Use the default `ghcr.io/openclaw-ai/openclaw-gateway:stable` or any compatible GHCR image. If pull is denied, run `docker login ghcr.io` with a PAT that has `read:packages`. |
+| **Public Image** | Use the default `ghcr.io/leojeulinmerville/openclaw-gateway:stable` or any compatible GHCR image. If pull is denied, run `docker login ghcr.io` with a PAT that has `read:packages`. |
 | **Private Registry** | Enter registry URL + image name. "Copy Login Command" gives you the `docker login` command to run first. |
 | **Local Build** | Point to the `gateway/` directory. "Build Locally" creates `openclaw-gateway:dev` and wires it into the compose file. |
 
