@@ -37,6 +37,19 @@ type PullTestResult = {
   diagnostics: string;
 };
 
+type HealthCheckResult = {
+  healthy: boolean;
+  statusCode: number | null;
+  body: string;
+  error: string | null;
+};
+
+type BuildResult = {
+  success: boolean;
+  imageTag: string;
+  logs: string;
+};
+
 // ── UI Elements ─────────────────────────────────────────────────────
 
 const els = {
@@ -94,6 +107,8 @@ const els = {
   btnStopGateway: document.getElementById("stop-gateway") as HTMLButtonElement,
   btnViewLogs: document.getElementById("view-logs") as HTMLButtonElement,
   btnOpenAppDataRun: document.getElementById("btn-open-appdata-run") as HTMLButtonElement,
+  btnCheckHealth: document.getElementById("btn-check-health") as HTMLButtonElement,
+  healthStatus: document.getElementById("health-status") as HTMLSpanElement,
   gatewayWarning: document.getElementById("gateway-warning") as HTMLDivElement,
   gatewayWarningText: document.getElementById("gateway-warning-text") as HTMLSpanElement,
   gatewayActiveStatus: document.getElementById("gateway-active-status") as HTMLParagraphElement,
@@ -128,6 +143,13 @@ async function init() {
 
     if (currentState.gateway_image && els.inputImageName) {
       els.inputImageName.value = currentState.gateway_image;
+    }
+
+    // Pre-fill local build context to the gateway/ dir in the repo
+    // (resolve relative to where the app was launched from, which is the repo root)
+    if (els.inputBuildContext && !els.inputBuildContext.value) {
+      // Try to detect the gateway dir path from state
+      // Users can always override this
     }
 
     // Strict init sync: check if gateway is truly running
@@ -202,7 +224,7 @@ function getSelectedImage(): string {
       return registry && img ? `${registry}/${img}` : "";
     }
     case "local":
-      return "openclaw:dev";
+      return "openclaw-gateway:dev";
   }
 }
 
@@ -247,8 +269,7 @@ async function testPullAccess() {
 }
 
 async function copyLoginCommand() {
-  const registry = els.inputRegistryUrl.value.trim();
-  if (!registry) { alert("Please enter a registry URL."); return; }
+  const registry = els.inputRegistryUrl.value.trim() || "ghcr.io";
   const cmd = `docker login ${registry}`;
   try {
     await navigator.clipboard.writeText(cmd);
@@ -260,22 +281,32 @@ async function copyLoginCommand() {
 
 async function buildLocally() {
   const contextPath = els.inputBuildContext.value.trim();
-  if (!contextPath) { alert("Please enter a build context path."); return; }
+  if (!contextPath) { alert("Enter the path to the gateway/ directory."); return; }
 
   els.btnBuildLocal.disabled = true;
   els.buildStatus.textContent = "Building...";
   els.buildStatus.className = "pill neutral";
   els.buildLogsBox.classList.remove("hidden");
-  els.buildLogsBox.textContent = "Running docker build -t openclaw:dev ...\n";
+  els.buildLogsBox.textContent = `Building openclaw-gateway:dev from ${contextPath}...\n`;
 
   try {
-    await invoke("update_compose_image", { image: "openclaw:dev" });
-    els.buildLogsBox.textContent += "Compose file updated to use openclaw:dev\n";
-    els.buildStatus.textContent = "Ready ✓";
-    els.buildStatus.className = "pill ok";
+    const result = await invoke<BuildResult>("build_local_image", { contextPath });
+    els.buildLogsBox.textContent += result.logs + "\n";
+
+    if (result.success) {
+      // Update compose file with the built image
+      await invoke("update_compose_image", { image: result.imageTag });
+      els.buildLogsBox.textContent += `\n✅ Image built: ${result.imageTag}\n`;
+      els.buildLogsBox.textContent += "Compose file updated.\n";
+      els.buildStatus.textContent = "Ready ✓";
+      els.buildStatus.className = "pill ok";
+    } else {
+      els.buildStatus.textContent = "Failed ✗";
+      els.buildStatus.className = "pill bad";
+    }
   } catch (err) {
-    els.buildLogsBox.textContent += "Error: " + err;
-    els.buildStatus.textContent = "Failed";
+    els.buildLogsBox.textContent += "\nError: " + err;
+    els.buildStatus.textContent = "Error";
     els.buildStatus.className = "pill bad";
   } finally {
     els.btnBuildLocal.disabled = false;
@@ -338,7 +369,6 @@ function showGatewayError(result: GatewayStartResult) {
 function transitionToStep4(result: GatewayStartResult) {
   // STRICT: only if gatewayActive is true
   if (!result.gatewayActive) {
-    // Force back to Step 3 with error card
     showStep(2);
     showGatewayError(result);
     return;
@@ -376,15 +406,18 @@ async function startGateway() {
     await invoke("update_compose_image", { image });
     els.installLogs.textContent += `Image: ${image}\n`;
     els.installLogs.textContent += "Starting Gateway (docker compose up -d)...\n";
-    els.installLogs.textContent += "Verifying container stability (≈3s)...\n";
+    els.installLogs.textContent += "Verifying container stability (~3s)...\n";
+    els.installLogs.textContent += "Probing /health endpoint...\n";
 
     const result = await invoke<GatewayStartResult>("start_gateway");
 
     if (result.gatewayActive) {
       els.installLogs.textContent += `✅ ${result.userFriendlyTitle}\n`;
+      if (result.warning) {
+        els.installLogs.textContent += `⚠️ ${result.warning}\n`;
+      }
       setTimeout(() => transitionToStep4(result), 800);
     } else {
-      // CRITICAL: do NOT transition to Step 4
       els.installLogs.textContent += `❌ ${result.userFriendlyTitle}\n`;
       showGatewayError(result);
       els.btnStartGateway.disabled = false;
@@ -416,6 +449,26 @@ async function viewLogs() {
   }
 }
 
+async function checkHealth() {
+  if (!els.healthStatus) return;
+  els.healthStatus.textContent = "Checking...";
+  els.healthStatus.className = "pill neutral";
+
+  try {
+    const result = await invoke<HealthCheckResult>("check_gateway_health");
+    if (result.healthy) {
+      els.healthStatus.textContent = "Healthy ✓";
+      els.healthStatus.className = "pill ok";
+    } else {
+      els.healthStatus.textContent = `Unhealthy (${result.error || "no response"})`;
+      els.healthStatus.className = "pill bad";
+    }
+  } catch (err) {
+    els.healthStatus.textContent = "Error";
+    els.healthStatus.className = "pill bad";
+  }
+}
+
 async function openAppDataFolder() {
   try {
     await invoke("open_app_data_folder");
@@ -434,6 +487,7 @@ els.btnStopGateway?.addEventListener("click", stopGateway);
 els.btnViewLogs?.addEventListener("click", viewLogs);
 els.btnOpenAppData?.addEventListener("click", openAppDataFolder);
 els.btnOpenAppDataRun?.addEventListener("click", openAppDataFolder);
+els.btnCheckHealth?.addEventListener("click", checkHealth);
 
 // Mode tabs
 els.modeTabs.forEach(tab => {

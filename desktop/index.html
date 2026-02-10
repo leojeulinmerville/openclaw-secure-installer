@@ -93,10 +93,10 @@
 
       <!-- Gateway Runtime Image Selection -->
       <div class="card">
-        <h3 class="section-title">Gateway Runtime Image</h3>
+        <h3 class="section-title">Gateway Runtime (must be OpenClaw-compatible)</h3>
         <p class="text-small text-muted" style="margin-top:-0.5rem; margin-bottom:1rem;">
-          Select an image that contains the OpenClaw gateway runtime (Node.js + gateway app).
-          <strong>Do not use generic images</strong> (e.g. nginx, alpine) here — they cannot run the gateway.
+          The image must contain <strong>Node.js</strong> and the <strong>OpenClaw gateway app</strong>.
+          Use the official distribution or build locally from the included <code>gateway/</code> directory.
         </p>
 
         <div class="mode-tabs">
@@ -115,6 +115,10 @@
             <button id="btn-test-pull" class="secondary">Test Pull Access</button>
             <span id="pull-status" class="pill neutral">Not tested</span>
           </div>
+          <p class="text-small text-muted" style="margin-top:0.5rem;">
+            If the image is on GHCR, you may need: <code>docker login ghcr.io</code>
+            (username = GitHub user, password = PAT with <code>read:packages</code>).
+          </p>
           <div id="pull-diagnostics-box" class="terminal-inline hidden"></div>
         </div>
 
@@ -139,15 +143,17 @@
         <!-- Mode: Local Build -->
         <div id="mode-local" class="mode-panel hidden">
           <div class="form-group">
-            <label for="build-context">Build context path</label>
-            <input type="text" id="build-context" placeholder="e.g. D:\projects\openclaw" />
+            <label for="build-context">Path to <code>gateway/</code> directory</label>
+            <input type="text" id="build-context" placeholder="e.g. D:\projects\openclaw-secure-installer\gateway" />
           </div>
           <div class="actions-inline">
             <button id="btn-build-local" class="secondary">Build Locally</button>
             <span id="build-status" class="pill neutral">Not built</span>
           </div>
-          <p class="text-small text-muted">Builds the image as <code>openclaw:dev</code> and sets it in the compose
-            file.</p>
+          <p class="text-small text-muted">
+            Builds the image as <code>openclaw-gateway:dev</code> from the Dockerfile in the gateway/ directory.
+            The included gateway app provides a <code>/health</code> endpoint for verification.
+          </p>
           <div id="build-logs-box" class="terminal-inline hidden"></div>
         </div>
       </div>
@@ -206,6 +212,12 @@
       <div class="success-card">
         <p id="gateway-active-status">✅ OpenClaw Gateway is active.</p>
         <p>Local URL: <a href="http://localhost" target="_blank">http://localhost</a></p>
+        <div class="status-row" style="margin-top:0.75rem;">
+          <span>Health:</span>
+          <span id="health-status" class="pill neutral">Not checked</span>
+          <button id="btn-check-health" class="secondary"
+            style="margin-left:0.5rem; padding:0.25rem 0.75rem; font-size:0.85rem;">Check /health</button>
+        </div>
       </div>
       <div class="actions">
         <button id="stop-gateway" class="danger">Stop Gateway</button>

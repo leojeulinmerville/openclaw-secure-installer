@@ -25,7 +25,9 @@ fn main() {
         gateway::test_pull_access,
         gateway::update_compose_image,
         gateway::open_app_data_folder,
-        gateway::docker_smoke_test
+        gateway::docker_smoke_test,
+        gateway::check_gateway_health,
+        gateway::build_local_image
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

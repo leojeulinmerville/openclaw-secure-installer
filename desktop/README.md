@@ -24,29 +24,56 @@ The app guides users through a 4-step no-code installer:
 1. **System Check** — Detects Docker CLI, daemon, and Compose v2
 2. **Configure** — Set HTTP/HTTPS ports, safe mode (enforced), storage path
 3. **Install** — Select gateway image source and start the gateway
-4. **Run** — View status, logs, stop/restart
+4. **Run** — View status, health check, logs, stop/restart
 
-### Gateway Runtime Image (Step 3)
+### Gateway Image Distribution
 
-Three modes for choosing the gateway container image. **The image must be gateway-compatible** (includes Node.js + gateway app). Do not use generic images like `nginx:alpine` or `alpine` — they will fail with exit code 127 ("node: not found").
+The gateway container must include **Node.js** and the **OpenClaw gateway app** (`openclaw.mjs`).
+A minimal reference gateway is included in the `gateway/` directory of this repo.
 
 | Mode | Description |
 |------|-------------|
-| **Public Image** | Enter a fully-qualified image (e.g. `ghcr.io/openclaw-ai/openclaw-gateway:stable`). Use "Test Pull Access" to validate before starting. |
+| **Public Image** | Use the default `ghcr.io/openclaw-ai/openclaw-gateway:stable` or any compatible GHCR image. If pull is denied, run `docker login ghcr.io` with a PAT that has `read:packages`. |
 | **Private Registry** | Enter registry URL + image name. "Copy Login Command" gives you the `docker login` command to run first. |
-| **Local Build** | Point to a build context directory. "Build Locally" creates `openclaw:dev` and wires it into the compose file. |
+| **Local Build** | Point to the `gateway/` directory. "Build Locally" creates `openclaw-gateway:dev` and wires it into the compose file. |
+
+### Developer Local Build
+
+To build and run the gateway locally from a fresh clone:
+
+```powershell
+# 1. Start the Tauri app
+pnpm -C desktop tauri:dev
+
+# 2. In the wizard (Step 3), switch to "Local Build" tab
+# 3. Enter the path to the gateway/ directory: <repo-root>\gateway
+# 4. Click "Build Locally" → builds openclaw-gateway:dev
+# 5. Click "Start Gateway" → container starts, /health is probed
+```
+
+Or manually:
+
+```powershell
+docker build -t openclaw-gateway:dev ./gateway
+```
+
+The gateway exposes:
+- `GET /health` → `{"status":"healthy","uptime_ms":...,"version":"0.1.0-mvp"}`
+- `GET /` → service info
 
 ### Docker Smoke Test
 
-Step 3 includes an independent **Docker Smoke Test** button that runs `docker run --rm hello-world` to verify Docker can pull and run containers. This does **not** affect gateway settings and is useful for troubleshooting.
+Step 3 includes an independent **Docker Smoke Test** button that runs `docker run --rm hello-world`.
+This does **not** affect gateway settings and is useful for verifying Docker connectivity.
 
 ### Container Health Verification
 
 After `docker compose up -d`, the app verifies stability using `docker inspect`:
 - Resolves the gateway container ID via `docker compose ps -q gateway`
 - Reads `Status`, `Restarting`, and `ExitCode` from `docker inspect`
-- A container is considered **healthy** only if: `Status == "running"` AND `Restarting == false` AND `ExitCode == 0`
+- A container is **healthy** only if: `Status == "running"` AND `Restarting == false` AND `ExitCode == 0`
 - **Stability window**: two checks 1500ms apart must both pass
+- After stability, probes `GET /health` on the configured HTTP port
 - Containers in a restart loop (e.g. exit 127) are correctly detected as **failed**
 
 ### State Machine

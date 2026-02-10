@@ -60,6 +60,23 @@ pub struct PullTestResult {
     pub diagnostics: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct HealthCheckResult {
+    pub healthy: bool,
+    pub status_code: Option<u16>,
+    pub body: String,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildResult {
+    pub success: bool,
+    pub image_tag: String,
+    pub logs: String,
+}
+
 // ── Container health (docker inspect) ───────────────────────────────
 
 /// Parsed container state from `docker inspect`.
@@ -141,6 +158,100 @@ fn get_gateway_logs(dir: &Path) -> String {
             format!("{}\n{}", stdout, stderr)
         }
         Err(e) => format!("Failed to get logs: {}", e),
+    }
+}
+
+/// Read HTTP port from .env file in the app data dir.
+fn read_http_port(dir: &Path) -> u16 {
+    let env_file = dir.join(".env");
+    if let Ok(content) = std::fs::read_to_string(&env_file) {
+        for line in content.lines() {
+            if let Some(rest) = line.strip_prefix("OPENCLAW_HTTP_PORT=") {
+                if let Ok(port) = rest.trim().parse::<u16>() {
+                    return port;
+                }
+            }
+        }
+    }
+    80 // default
+}
+
+/// Probe the gateway /health endpoint via raw HTTP over TCP.
+fn probe_health(port: u16) -> HealthCheckResult {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    let addr = format!("127.0.0.1:{}", port);
+    let parsed: std::net::SocketAddr = match addr.parse() {
+        Ok(a) => a,
+        Err(e) => {
+            return HealthCheckResult {
+                healthy: false,
+                status_code: None,
+                body: String::new(),
+                error: Some(format!("Invalid address {}: {}", addr, e)),
+            };
+        }
+    };
+
+    let stream = TcpStream::connect_timeout(&parsed, Duration::from_secs(3));
+    let mut stream = match stream {
+        Ok(s) => s,
+        Err(e) => {
+            return HealthCheckResult {
+                healthy: false,
+                status_code: None,
+                body: String::new(),
+                error: Some(format!("Connection to {} failed: {}", addr, e)),
+            };
+        }
+    };
+
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(3)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(3)));
+
+    let request = format!(
+        "GET /health HTTP/1.1\r\nHost: localhost:{}\r\nConnection: close\r\n\r\n",
+        port
+    );
+    if let Err(e) = stream.write_all(request.as_bytes()) {
+        return HealthCheckResult {
+            healthy: false,
+            status_code: None,
+            body: String::new(),
+            error: Some(format!("Write failed: {}", e)),
+        };
+    }
+
+    let mut response = String::new();
+    let _ = stream.read_to_string(&mut response);
+
+    // Parse status code from first line: "HTTP/1.1 200 OK"
+    let status_code = response
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .and_then(|code| code.parse::<u16>().ok());
+
+    // Extract body (after blank line)
+    let body = response
+        .split("\r\n\r\n")
+        .nth(1)
+        .unwrap_or("")
+        .to_string();
+
+    let healthy = status_code == Some(200) && body.contains("healthy");
+
+    HealthCheckResult {
+        healthy,
+        status_code,
+        body,
+        error: if healthy {
+            None
+        } else {
+            Some("Health check did not return 200/healthy".into())
+        },
     }
 }
 
@@ -420,15 +531,32 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     let (is_stable, inspect_diag) = check_gateway_strictly(&dir, true);
 
     if is_stable {
+        // 5) Health probe — try /health on configured HTTP port
+        let http_port = read_http_port(&dir);
+        let health = probe_health(http_port);
+        let health_warning = if health.healthy {
+            None
+        } else {
+            Some(format!(
+                "Container is running but /health on port {} did not respond with 200. {}",
+                http_port,
+                health.error.unwrap_or_default()
+            ))
+        };
+
         Ok(GatewayStartResult {
             gateway_active: true,
             status: "started".into(),
             user_friendly_title: "Gateway Running".into(),
-            user_friendly_message: "OpenClaw Gateway started and verified stable.".into(),
+            user_friendly_message: if health.healthy {
+                "OpenClaw Gateway started, stable, and /health OK.".into()
+            } else {
+                "OpenClaw Gateway started but /health not yet responding.".into()
+            },
             raw_diagnostics: sanitize_output(&combined_raw),
             remediation_steps: vec![],
             compose_file_path: compose_file.display().to_string(),
-            warning: None,
+            warning: health_warning,
         })
     } else {
         // Container started but is crashing / restarting
@@ -501,6 +629,45 @@ pub async fn docker_smoke_test() -> Result<PullTestResult, String> {
         accessible: output.status.success(),
         image: "hello-world".into(),
         diagnostics: sanitize_output(&combined),
+    })
+}
+
+#[tauri::command]
+pub async fn check_gateway_health(app: AppHandle) -> Result<HealthCheckResult, String> {
+    let dir = get_app_data_dir(&app)?;
+    let port = read_http_port(&dir);
+    Ok(probe_health(port))
+}
+
+#[tauri::command]
+pub async fn build_local_image(context_path: String) -> Result<BuildResult, String> {
+    let context = std::path::Path::new(&context_path);
+    if !context.join("Dockerfile").exists() {
+        return Ok(BuildResult {
+            success: false,
+            image_tag: String::new(),
+            logs: format!(
+                "No Dockerfile found at {}. Ensure the build context contains a valid Dockerfile.",
+                context.display()
+            ),
+        });
+    }
+
+    let tag = "openclaw-gateway:dev";
+    let output = Command::new("docker")
+        .args(["build", "-t", tag, "."])
+        .current_dir(context)
+        .output()
+        .map_err(|e| format!("Failed to run docker build: {}", e))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let logs = format!("{}\n{}", stdout, stderr);
+
+    Ok(BuildResult {
+        success: output.status.success(),
+        image_tag: if output.status.success() { tag.to_string() } else { String::new() },
+        logs: sanitize_output(&logs),
     })
 }
 
