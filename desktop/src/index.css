@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        @apply bg-slate-900 text-slate-100 min-h-screen selection:bg-cyan-500/30;
+        font-family: 'Inter', system-ui, sans-serif;
+        /* Deep liquid background */
+        background: radial-gradient(circle at 50% 0%, #1e1b4b 0%, #0f172a 100%);
+    }
+}
+
+@layer components {
+    .glass-panel {
+        @apply bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl rounded-2xl;
+    }
+
+    .glass-button {
+        @apply px-4 py-2 rounded-lg font-medium transition-all duration-200 bg-white/10 hover:bg-white/20 border border-white/10 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+    }
+
+    .glass-input {
+        @apply bg-black/20 border border-white/10 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 placeholder:text-white/20 text-white w-full;
+    }
+
+    .pill {
+        @apply px-2 py-0.5 rounded-full text-xs font-semibold border inline-flex items-center gap-1;
+    }
+
+    .pill.ok {
+        @apply bg-emerald-500/20 text-emerald-300 border-emerald-500/30;
+    }
+
+    .pill.bad {
+        @apply bg-red-500/20 text-red-300 border-red-500/30;
+    }
+
+    .pill.neutral {
+        @apply bg-slate-500/20 text-slate-300 border-slate-500/30;
+    }
+}
+
+/* Custom scrollbar for logs */
+.logs-scroll::-webkit-scrollbar {
+    width: 8px;
+}
+
+.logs-scroll::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.logs-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
+
+.logs-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
