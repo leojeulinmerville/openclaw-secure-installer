@@ -116,6 +116,21 @@ pub async fn configure_installation(
   Ok(())
 }
 
+#[tauri::command]
+pub async fn save_gateway_image(app: AppHandle, image: String) -> Result<(), String> {
+  let dir = get_app_data_dir(&app)?;
+  let state_path = dir.join("state.json");
+  if state_path.exists() {
+    let content = fs::read_to_string(&state_path).map_err(|e| e.to_string())?;
+    if let Ok(mut state) = serde_json::from_str::<InstallerState>(&content) {
+      state.gateway_image = image;
+      let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
+      fs::write(&state_path, json).map_err(|e| e.to_string())?;
+    }
+  }
+  Ok(())
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]

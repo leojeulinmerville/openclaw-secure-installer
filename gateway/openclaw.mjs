@@ -1,10 +1,10 @@
 // OpenClaw Gateway – Minimal MVP Server
 // This is the entrypoint for the gateway container.
-// It serves HTTP on port 80 with a /health endpoint.
+// It serves HTTP with a /health endpoint.
 
 import { createServer } from "node:http";
 
-const PORT = process.env.PORT || 80;
+const PORT = parseInt(process.env.OPENCLAW_CONTAINER_PORT || process.env.PORT || "8080", 10);
 const SAFE_MODE = process.env.OPENCLAW_SAFE_MODE === "1";
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
 

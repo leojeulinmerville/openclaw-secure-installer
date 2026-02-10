@@ -120,6 +120,10 @@ const els = {
 let currentState: InstallerState | null = null;
 let currentImageMode: "public" | "private" | "local" = "public";
 
+// ─── Source of truth: the runtime image that will be used by Start Gateway.
+//     Updated by: init() from state.json, Local Build success, user editing input fields.
+let activeRuntimeImage = "ghcr.io/openclaw-ai/openclaw-gateway:stable";
+
 // ── Navigation ──────────────────────────────────────────────────────
 
 function showStep(stepIndex: number) {
@@ -141,15 +145,21 @@ async function init() {
     if (els.installId) els.installId.textContent = `ID: ${currentState.install_id}`;
     if (els.pathDisplay) els.pathDisplay.textContent = currentState.app_data_dir;
 
-    if (currentState.gateway_image && els.inputImageName) {
-      els.inputImageName.value = currentState.gateway_image;
-    }
+    // Restore persisted gateway image and select correct tab
+    if (currentState.gateway_image) {
+      activeRuntimeImage = currentState.gateway_image;
 
-    // Pre-fill local build context to the gateway/ dir in the repo
-    // (resolve relative to where the app was launched from, which is the repo root)
-    if (els.inputBuildContext && !els.inputBuildContext.value) {
-      // Try to detect the gateway dir path from state
-      // Users can always override this
+      if (currentState.gateway_image === "openclaw-gateway:dev") {
+        // User previously did a Local Build
+        switchMode("local");
+      } else if (currentState.gateway_image.includes("/")) {
+        // Contains registry path — use public mode
+        els.inputImageName.value = currentState.gateway_image;
+        switchMode("public");
+      } else {
+        els.inputImageName.value = currentState.gateway_image;
+        switchMode("public");
+      }
     }
 
     // Strict init sync: check if gateway is truly running
@@ -204,7 +214,7 @@ async function saveConfiguration() {
     await invoke("configure_installation", {
       httpPort,
       httpsPort,
-      gatewayImage: getSelectedImage(),
+      gatewayImage: activeRuntimeImage,
     });
     showStep(2); // Go to Step 3
   } catch (err) {
@@ -214,7 +224,8 @@ async function saveConfiguration() {
 
 // ── Step 3: Image Source ────────────────────────────────────────────
 
-function getSelectedImage(): string {
+/** Read the current image from the active tab inputs. */
+function readSelectedImage(): string {
   switch (currentImageMode) {
     case "public":
       return els.inputImageName.value.trim() || "ghcr.io/openclaw-ai/openclaw-gateway:stable";
@@ -236,10 +247,13 @@ function switchMode(mode: "public" | "private" | "local") {
   els.modePublic.classList.toggle("hidden", mode !== "public");
   els.modePrivate.classList.toggle("hidden", mode !== "private");
   els.modeLocal.classList.toggle("hidden", mode !== "local");
+
+  // Update activeRuntimeImage when user switches tabs
+  activeRuntimeImage = readSelectedImage();
 }
 
 async function testPullAccess() {
-  const image = getSelectedImage();
+  const image = readSelectedImage();
   if (!image) { alert("Please enter an image name."); return; }
 
   els.btnTestPull.disabled = true;
@@ -252,6 +266,7 @@ async function testPullAccess() {
     if (result.accessible) {
       els.pullStatus.textContent = "Accessible ✓";
       els.pullStatus.className = "pill ok";
+      activeRuntimeImage = image;
     } else {
       els.pullStatus.textContent = "Not accessible ✗";
       els.pullStatus.className = "pill bad";
@@ -294,10 +309,16 @@ async function buildLocally() {
     els.buildLogsBox.textContent += result.logs + "\n";
 
     if (result.success) {
+      // ── KEY FIX: persist the built image as the active runtime image ──
+      activeRuntimeImage = result.imageTag; // "openclaw-gateway:dev"
+
       // Update compose file with the built image
       await invoke("update_compose_image", { image: result.imageTag });
+      // Persist to state.json so restart / Start Gateway uses it
+      await invoke("save_gateway_image", { image: result.imageTag });
+
       els.buildLogsBox.textContent += `\n✅ Image built: ${result.imageTag}\n`;
-      els.buildLogsBox.textContent += "Compose file updated.\n";
+      els.buildLogsBox.textContent += "Compose file updated. Runtime image set to: " + result.imageTag + "\n";
       els.buildStatus.textContent = "Ready ✓";
       els.buildStatus.className = "pill ok";
     } else {
@@ -369,7 +390,7 @@ function showGatewayError(result: GatewayStartResult) {
 function transitionToStep4(result: GatewayStartResult) {
   // STRICT: only if gatewayActive is true
   if (!result.gatewayActive) {
-    showStep(2);
+    showStep(2); // Force Step 3
     showGatewayError(result);
     return;
   }
@@ -380,31 +401,35 @@ function transitionToStep4(result: GatewayStartResult) {
     els.composePathDisplay.textContent = `Compose: ${result.composeFilePath}`;
   }
 
-  if (result.status === "already_running") {
-    els.gatewayActiveStatus.textContent = "✅ OpenClaw Gateway is already running.";
-  } else {
-    els.gatewayActiveStatus.textContent = "✅ OpenClaw Gateway started successfully.";
-  }
-
+  // Status message depends on health warning
   if (result.warning) {
+    els.gatewayActiveStatus.textContent = "⚠️ Gateway is running but may be unhealthy.";
     els.gatewayWarning.classList.remove("hidden");
     els.gatewayWarningText.textContent = result.warning;
+  } else if (result.status === "already_running") {
+    els.gatewayActiveStatus.textContent = "✅ OpenClaw Gateway is already running.";
+    els.gatewayWarning.classList.add("hidden");
   } else {
+    els.gatewayActiveStatus.textContent = "✅ OpenClaw Gateway started and /health OK.";
     els.gatewayWarning.classList.add("hidden");
   }
 }
 
 async function startGateway() {
-  const image = getSelectedImage();
+  // ── KEY FIX: Use activeRuntimeImage (set by Local Build or tab switch),
+  //    NOT re-reading the public input field.
+  const image = activeRuntimeImage;
   if (!image) { alert("Please select or enter a gateway-compatible image."); return; }
 
   els.btnStartGateway.disabled = true;
-  els.installLogs.textContent = "Updating compose with selected image...\n";
+  els.installLogs.textContent = `Using runtime image: ${image}\n`;
   hideGatewayError();
 
   try {
+    // Only update compose if image changed from what's currently in compose
     await invoke("update_compose_image", { image });
-    els.installLogs.textContent += `Image: ${image}\n`;
+    await invoke("save_gateway_image", { image });
+
     els.installLogs.textContent += "Starting Gateway (docker compose up -d)...\n";
     els.installLogs.textContent += "Verifying container stability (~3s)...\n";
     els.installLogs.textContent += "Probing /health endpoint...\n";
@@ -418,6 +443,7 @@ async function startGateway() {
       }
       setTimeout(() => transitionToStep4(result), 800);
     } else {
+      // STRICT: do NOT transition to Step 4
       els.installLogs.textContent += `❌ ${result.userFriendlyTitle}\n`;
       showGatewayError(result);
       els.btnStartGateway.disabled = false;
@@ -495,6 +521,11 @@ els.modeTabs.forEach(tab => {
     const mode = tab.dataset.mode as "public" | "private" | "local";
     switchMode(mode);
   });
+});
+
+// Track manual image input changes
+els.inputImageName?.addEventListener("input", () => {
+  activeRuntimeImage = els.inputImageName.value.trim();
 });
 
 // Image source

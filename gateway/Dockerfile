@@ -8,9 +8,9 @@ WORKDIR /home/node
 # Copy only what the gateway needs
 COPY openclaw.mjs .
 
-# The compose template runs: ["node", "openclaw.mjs", "gateway"]
-# We accept any trailing args gracefully.
-EXPOSE 80
+# Container listens on 8080 (unprivileged) — host port mapped via compose
+ENV OPENCLAW_CONTAINER_PORT=8080
+EXPOSE 8080
 
 USER node
 

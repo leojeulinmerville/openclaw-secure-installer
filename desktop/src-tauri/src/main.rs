@@ -16,6 +16,7 @@ fn main() {
         state_manager::get_state,
         state_manager::save_state,
         state_manager::configure_installation,
+        state_manager::save_gateway_image,
         secrets::set_secret,
         secrets::has_secret,
         gateway::start_gateway,

@@ -394,13 +394,13 @@ pub fn generate_compose_content(image: &str) -> String {
     image: {}
     command: ["node", "openclaw.mjs", "gateway"]
     ports:
-      - "${{OPENCLAW_HTTP_PORT:-80}}:80"
-      - "${{OPENCLAW_HTTPS_PORT:-443}}:443"
+      - "${{OPENCLAW_HTTP_PORT:-80}}:8080"
     volumes:
       - openclaw_home:/home/node
     environment:
       - OPENCLAW_SAFE_MODE=1
       - LOG_LEVEL=info
+      - OPENCLAW_CONTAINER_PORT=8080
     restart: unless-stopped
 
 volumes:
@@ -861,7 +861,7 @@ mod tests {
         assert!(steps.iter().any(|s| s.contains("Docker Desktop")));
     }
 
-    // -- compose generation --
+    // -- compose generation + port mapping --
 
     #[test]
     fn test_generate_compose_uses_custom_image() {
@@ -872,8 +872,43 @@ mod tests {
 
     #[test]
     fn test_generate_compose_uses_local_dev_image() {
-        let content = generate_compose_content("openclaw:dev");
-        assert!(content.contains("image: openclaw:dev"));
+        let content = generate_compose_content("openclaw-gateway:dev");
+        assert!(content.contains("image: openclaw-gateway:dev"));
+    }
+
+    #[test]
+    fn test_compose_maps_host_to_container_8080() {
+        let content = generate_compose_content("openclaw-gateway:dev");
+        // Port mapping should be host → 8080 (container)
+        assert!(content.contains(":8080\""), "Compose must map to container port 8080");
+        // Must NOT map to container port 80
+        assert!(!content.contains(":80\""), "Compose must not map to container port 80");
+    }
+
+    #[test]
+    fn test_compose_has_container_port_env() {
+        let content = generate_compose_content("openclaw-gateway:dev");
+        assert!(
+            content.contains("OPENCLAW_CONTAINER_PORT=8080"),
+            "Compose must set OPENCLAW_CONTAINER_PORT"
+        );
+    }
+
+    #[test]
+    fn test_read_http_port_defaults_to_80() {
+        let tmp = std::env::temp_dir().join("test_port_default");
+        let _ = std::fs::create_dir_all(&tmp);
+        // No .env file → should default to 80
+        let _ = std::fs::remove_file(tmp.join(".env"));
+        assert_eq!(read_http_port(&tmp), 80);
+    }
+
+    #[test]
+    fn test_read_http_port_parses_env() {
+        let tmp = std::env::temp_dir().join("test_port_parse");
+        let _ = std::fs::create_dir_all(&tmp);
+        std::fs::write(tmp.join(".env"), "OPENCLAW_HTTP_PORT=9090\nLOG_LEVEL=info\n").unwrap();
+        assert_eq!(read_http_port(&tmp), 9090);
     }
 
     // -- is_healthy --
