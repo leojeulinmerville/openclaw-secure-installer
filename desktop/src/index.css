@@ -1,6 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+    --color-glass: rgba(255, 255, 255, 0.1);
+    --color-glass-border: rgba(255, 255, 255, 0.2);
+    --backdrop-blur-xs: 2px;
+
+    /* Re-inject custom color palette if needed, or use standar utilities */
+}
 
 @layer base {
     body {
