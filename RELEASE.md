@@ -26,7 +26,7 @@ for Windows, plus the companion gateway Docker image.
 pnpm --filter ./desktop... install
 
 # Run tests first
-cd desktop/src-tauri && cargo test && cd ../..
+cargo test --manifest-path desktop/src-tauri/Cargo.toml
 
 # Build the release installer (MSI + NSIS exe)
 pnpm -C desktop tauri:build

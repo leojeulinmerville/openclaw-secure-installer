@@ -47,7 +47,10 @@ jobs:
           restore-keys: pnpm-windows-
 
       - name: Install dependencies
-        run: pnpm --filter ./desktop... install --frozen-lockfile
+        run: pnpm --filter openclaw-secure-installer-desktop... install --frozen-lockfile
+
+      - name: Build Frontend
+        run: pnpm --filter openclaw-secure-installer-desktop... build
 
       - name: Run Rust tests
         working-directory: desktop/src-tauri
