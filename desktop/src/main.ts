@@ -35,6 +35,7 @@ type PullTestResult = {
   accessible: boolean;
   image: string;
   diagnostics: string;
+  warning?: string | null;
 };
 
 type HealthCheckResult = {
@@ -267,6 +268,12 @@ async function testPullAccess() {
       els.pullStatus.textContent = "Accessible ✓";
       els.pullStatus.className = "pill ok";
       activeRuntimeImage = image;
+
+      if (result.warning) {
+        // Show warning but keep accessible status
+        els.pullDiagnosticsBox.textContent = "⚠️ " + result.warning;
+        els.pullDiagnosticsBox.classList.remove("hidden");
+      }
     } else {
       els.pullStatus.textContent = "Not accessible ✗";
       els.pullStatus.className = "pill bad";
@@ -426,9 +433,13 @@ async function startGateway() {
   hideGatewayError();
 
   try {
-    // Only update compose if image changed from what's currently in compose
-    await invoke("update_compose_image", { image });
+    // 1. PERSIST selection before doing anything else
+    // This ensures if the user manually typed a public image and clicked Start, it is saved.
     await invoke("save_gateway_image", { image });
+
+    // 2. Update compose if image changed
+    await invoke("update_compose_image", { image });
+
 
     els.installLogs.textContent += "Starting Gateway (docker compose up -d)...\n";
     els.installLogs.textContent += "Verifying container stability (~3s)...\n";

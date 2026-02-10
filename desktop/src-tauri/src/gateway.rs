@@ -58,6 +58,7 @@ pub struct PullTestResult {
     pub accessible: bool,
     pub image: String,
     pub diagnostics: String,
+    pub warning: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -598,6 +599,7 @@ fn extract_exit_code(inspect_diag: &str) -> i32 {
 
 #[tauri::command]
 pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
+    // 1. Try manifest inspect first (fastest)
     let output = Command::new("docker")
         .args(["manifest", "inspect", &image])
         .output()
@@ -607,11 +609,54 @@ pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let combined = format!("{}\n{}", stdout, stderr);
 
+    if output.status.success() {
+        return Ok(PullTestResult {
+            accessible: true,
+            image,
+            diagnostics: sanitize_output(&combined),
+            warning: None,
+        });
+    }
+
+    // 2. If manifest failed, check if it looks like an auth/permission error
+    if should_try_pull_fallback(&stderr) {
+        // Fallback: try actual docker pull
+        // This handles cases where manifest inspect is denied but pull is allowed (common in GHCR public packages)
+        let pull_output = Command::new("docker")
+            .args(["pull", &image])
+            .output()
+            .map_err(|e| format!("Failed to execute docker pull: {}", e))?;
+
+        let pull_stdout = String::from_utf8_lossy(&pull_output.stdout);
+        let pull_stderr = String::from_utf8_lossy(&pull_output.stderr);
+        let pull_combined = format!("{}\n{}", pull_stdout, pull_stderr);
+
+        if pull_output.status.success() {
+             return Ok(PullTestResult {
+                accessible: true,
+                image: image.clone(),
+                diagnostics: sanitize_output(&pull_combined),
+                warning: Some("Manifest check restricted, but pull succeeded.".to_string()),
+            });
+        }
+    }
+
+    // Default failure
     Ok(PullTestResult {
-        accessible: output.status.success(),
+        accessible: false,
         image,
         diagnostics: sanitize_output(&combined),
+        warning: None,
     })
+}
+
+fn should_try_pull_fallback(stderr: &str) -> bool {
+    let lower = stderr.to_lowercase();
+    lower.contains("unauthorized")
+        || lower.contains("authentication required")
+        || lower.contains("denied")
+        || lower.contains("no access")
+        || lower.contains("forbidden")
 }
 
 #[tauri::command]
@@ -629,6 +674,7 @@ pub async fn docker_smoke_test() -> Result<PullTestResult, String> {
         accessible: output.status.success(),
         image: "hello-world".into(),
         diagnostics: sanitize_output(&combined),
+        warning: None,
     })
 }
 
@@ -1008,5 +1054,17 @@ mod tests {
         };
         assert!(!failed.gateway_active);
         assert!(!failed.remediation_steps.is_empty());
+    }
+    #[test]
+    fn test_should_try_pull_fallback() {
+        assert!(should_try_pull_fallback("Error: unauthorized access"));
+        assert!(should_try_pull_fallback("authentication required"));
+        assert!(should_try_pull_fallback("status: 403 forbidden"));
+        assert!(should_try_pull_fallback("access denied"));
+        assert!(should_try_pull_fallback("no access to this resource"));
+        
+        assert!(!should_try_pull_fallback("image not found"));
+        assert!(!should_try_pull_fallback("connection refused"));
+        assert!(!should_try_pull_fallback("manifest unknown"));
     }
 }
