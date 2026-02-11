@@ -3,59 +3,106 @@ use std::collections::HashMap;
 use std::fs;
 use tauri::{AppHandle, Manager};
 
-// In a real app, use tauri-plugin-keyring. For MVP, we use a restricted JSON file.
-// We strictly avoid logging values.
+// ── OS Keychain-backed secret store ─────────────────────────────────
+//
+// Uses the `keyring` crate which maps to:
+//   • Windows → Credential Manager
+//   • macOS   → Keychain
+//   • Linux   → Secret Service (libsecret)
+//
+// Service name is used as the namespace inside the credential store.
+const KEYRING_SERVICE: &str = "my-openclaw";
 
+/// Legacy plaintext store – only used for one-time migration.
 #[derive(Debug, Serialize, Deserialize, Default)]
-struct SecretsStore {
+struct LegacySecretsStore {
   secrets: HashMap<String, String>,
 }
 
-fn get_secrets_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+fn legacy_secrets_path(app: &AppHandle) -> Result<std::path::PathBuf, String> {
   let dir = app
     .path()
     .app_data_dir()
     .map_err(|e| format!("Failed to resolve app data dir: {}", e))?;
-  // Use a dotfile to potentially hide it from casual listing
   Ok(dir.join(".secrets.json"))
+}
+
+/// Migrate plaintext .secrets.json → OS keychain, then delete the file.
+/// Runs once; if the file does not exist this is a no-op.
+fn migrate_legacy_secrets(app: &AppHandle) {
+  let path = match legacy_secrets_path(app) {
+    Ok(p) => p,
+    Err(_) => return,
+  };
+  if !path.exists() {
+    return;
+  }
+
+  let content = match fs::read_to_string(&path) {
+    Ok(c) => c,
+    Err(_) => return,
+  };
+  let store: LegacySecretsStore = match serde_json::from_str(&content) {
+    Ok(s) => s,
+    Err(_) => return,
+  };
+
+  for (key, value) in &store.secrets {
+    if let Ok(entry) = keyring::Entry::new(KEYRING_SERVICE, key) {
+      let _ = entry.set_password(value);
+    }
+  }
+
+  // Securely delete: overwrite with zeros then remove.
+  let zeros = vec![0u8; content.len().max(64)];
+  let _ = fs::write(&path, &zeros);
+  let _ = fs::remove_file(&path);
 }
 
 #[tauri::command]
 pub async fn set_secret(app: AppHandle, key: String, value: String) -> Result<(), String> {
-  let path = get_secrets_path(&app)?;
-  let mut store = if path.exists() {
-    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-    serde_json::from_str(&content).unwrap_or_default()
-  } else {
-    SecretsStore::default()
-  };
+  // Ensure legacy migration has happened.
+  migrate_legacy_secrets(&app);
 
-  store.secrets.insert(key, value);
-  
-  // Save
-  let json = serde_json::to_string(&store).map_err(|e| e.to_string())?;
-  fs::write(path, json).map_err(|e| e.to_string())?;
+  let entry = keyring::Entry::new(KEYRING_SERVICE, &key)
+    .map_err(|e| format!("Keyring error: {}", e))?;
+  entry
+    .set_password(&value)
+    .map_err(|e| format!("Failed to store secret: {}", e))?;
   Ok(())
 }
 
 #[tauri::command]
 pub async fn has_secret(app: AppHandle, key: String) -> Result<bool, String> {
-  let path = get_secrets_path(&app)?;
-  if !path.exists() {
-    return Ok(false);
+  migrate_legacy_secrets(&app);
+
+  let entry = keyring::Entry::new(KEYRING_SERVICE, &key)
+    .map_err(|e| format!("Keyring error: {}", e))?;
+  match entry.get_password() {
+    Ok(_) => Ok(true),
+    Err(keyring::Error::NoEntry) => Ok(false),
+    Err(e) => Err(format!("Keyring read error: {}", e)),
   }
-  let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
-  let store: SecretsStore = serde_json::from_str(&content).unwrap_or_default();
-  Ok(store.secrets.contains_key(&key))
 }
 
-// Internal helper, not exposed to frontend to prevent accidental logging
-pub fn get_secret_internal(app: &AppHandle, key: &str) -> Option<String> {
-  let path = get_secrets_path(app).ok()?;
-  if !path.exists() {
-    return None;
+#[tauri::command]
+pub async fn delete_secret(app: AppHandle, key: String) -> Result<(), String> {
+  migrate_legacy_secrets(&app);
+
+  let entry = keyring::Entry::new(KEYRING_SERVICE, &key)
+    .map_err(|e| format!("Keyring error: {}", e))?;
+  match entry.delete_credential() {
+    Ok(()) => Ok(()),
+    Err(keyring::Error::NoEntry) => Ok(()), // already gone
+    Err(e) => Err(format!("Failed to delete secret: {}", e)),
   }
-  let content = fs::read_to_string(&path).ok()?;
-  let store: SecretsStore = serde_json::from_str(&content).ok()?;
-  store.secrets.get(key).cloned()
+}
+
+/// Internal helper — never exposed to the frontend to prevent
+/// accidental logging of secret values.
+pub fn get_secret_internal(app: &AppHandle, key: &str) -> Option<String> {
+  migrate_legacy_secrets(app);
+
+  let entry = keyring::Entry::new(KEYRING_SERVICE, key).ok()?;
+  entry.get_password().ok()
 }

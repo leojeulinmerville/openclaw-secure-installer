@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
-  "productName": "OpenClaw Secure Installer",
-  "version": "0.1.0",
-  "identifier": "ai.openclaw.secureinstaller",
+  "productName": "My OpenClaw",
+  "version": "0.1.6",
+  "identifier": "ai.openclaw.myopenclaw",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "beforeBuildCommand": "pnpm build",
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "OpenClaw Secure Installer",
-        "width": 1024,
-        "height": 720,
+        "title": "My OpenClaw – Mission Control",
+        "width": 1280,
+        "height": 800,
         "resizable": true
       }
     ],
@@ -26,7 +26,7 @@
     "active": true,
     "targets": ["msi", "nsis"],
     "publisher": "OpenClaw AI",
-    "shortDescription": "Install and manage the OpenClaw Gateway via Docker",
+    "shortDescription": "Mission Control cockpit for OpenClaw agents",
     "windows": {
       "certificateThumbprint": null,
       "timestampUrl": ""

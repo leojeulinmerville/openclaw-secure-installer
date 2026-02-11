@@ -36,8 +36,8 @@ pnpm -C desktop tauri:build
 
 | Format | Path |
 |--------|------|
-| MSI | `desktop/src-tauri/target/release/bundle/msi/OpenClaw Secure Installer_0.1.0_x64_en-US.msi` |
-| NSIS | `desktop/src-tauri/target/release/bundle/nsis/OpenClaw Secure Installer_0.1.0_x64-setup.exe` |
+| MSI | `desktop/src-tauri/target/release/bundle/msi/OpenClaw Secure Installer_0.1.6_x64_en-US.msi` |
+| NSIS | `desktop/src-tauri/target/release/bundle/nsis/OpenClaw Secure Installer_0.1.6_x64-setup.exe` |
 
 ---
 
@@ -57,6 +57,25 @@ pnpm -C desktop tauri:build
 > **If the gateway image is not yet published**, use the **Local Build** tab:
 > point it to the `gateway/` directory in the repo and click "Build Locally".
 
+## 2b. Test New Features (Gateway Gating, Internet, Chat)
+
+1. **Gateway Gating**:
+   - Stop the gateway manually (docker stop).
+   - In the app, verify that a red "Gateway Stopped" banner appears.
+   - Try to start an agent → should be blocked.
+   - Click "Start Gateway" on the banner → should recover.
+
+2. **Allow Internet Toggle**:
+   - Go to **Settings** → verify "Allow Internet" is OFF by default.
+   - Go to **Chat** → Select "OpenAI" → should see "Internet is disabled" warning.
+   - Go back to **Settings** → Toggle ON.
+   - Go to **Chat** → OpenAI should now prompt for API Key (or work if key exists).
+
+3. **In-App Chat**:
+   - **Ollama**: Select Ollama (ensure it's running locally) → send "hello" → should reply.
+   - **OpenAI**: Add API key in **Settings -> Secrets** → send "hello" → should reply.
+
+
 ---
 
 ## 3. Build & Push the Gateway Image
@@ -66,11 +85,11 @@ pnpm -C desktop tauri:build
 Push a semver tag to trigger the `gateway-publish.yml` workflow:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.6
+git push origin v0.1.6
 ```
 
-This builds `ghcr.io/leojeulinmerville/openclaw-gateway:0.1.0` + `:stable` + `:sha-<commit>`.
+This builds `ghcr.io/leojeulinmerville/openclaw-gateway:0.1.6` + `:stable` + `:sha-<commit>`.
 
 ### Manual
 

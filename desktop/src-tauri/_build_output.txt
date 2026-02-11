@@ -1,0 +1,73 @@
+﻿cargo :    
+Compiling 
+my_openclaw v0.1.0 (
+D:\MVP\openclaw-secu
+re-installer\desktop
+\src-tauri)
+Au caractère 
+Ligne:1 : 1
++ cargo check 2>&1 
+| Out-File 
+-FilePath d:\MVP\ope
+nclaw-secure-install
+e ...
++ ~~~~~~~~~~~~~~~~
+    + CategoryInfo  
+            : NotS  
+  pecified: (   C   
+ ompiling my...k    
+top\src-tauri):    
+String) [], Rem    
+oteException
+    + FullyQualifie 
+   dErrorId : Nati  
+  veCommandError
+ 
+warning: hard 
+linking files in 
+the incremental 
+compilation cache 
+failed. copying 
+files instead. 
+consider moving the 
+cache directory to 
+a file system which 
+supports hard 
+linking in session 
+dir `\\?\D:\MVP\open
+claw-secure-installe
+r\desktop\src-tauri\
+target\debug\increme
+ntal\my_openclaw-38f
+v21vfwn5nk\s-hfon04z
+hz9-0e3yhaj-working`
+
+warning: function `g
+et_secret_internal` 
+is never used
+   --> 
+src\secrets.rs:103:8
+    |
+103 | pub fn get_sec
+ret_internal(app: 
+&AppHandle, key: 
+&str) -> 
+Option<String> {
+    |        
+^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(
+dead_code)]` (part 
+of 
+`#[warn(unused)]`) 
+on by default
+
+warning: 
+`my_openclaw` (bin 
+"my_openclaw") 
+generated 2 warnings
+    Finished `dev` 
+profile 
+[unoptimized + 
+debuginfo] 
+target(s) in 5.71s

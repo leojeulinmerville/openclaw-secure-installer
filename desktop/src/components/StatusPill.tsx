@@ -1,23 +1,21 @@
 import clsx from 'clsx';
-import { Loader2 } from 'lucide-react';
 
 interface StatusPillProps {
-  status: 'ok' | 'bad' | 'neutral' | 'loading';
+  status: 'ok' | 'bad' | 'warn' | 'neutral' | 'info';
   text: string;
 }
 
 export function StatusPill({ status, text }: StatusPillProps) {
   return (
-    <span
-      className={clsx(
-        "pill transition-all duration-300",
-        status === 'ok' && "ok",
-        status === 'bad' && "bad",
-        status === 'neutral' && "neutral",
-        status === 'loading' && "neutral animate-pulse"
-      )}
-    >
-      {status === 'loading' && <Loader2 className="w-3 h-3 animate-spin mr-1" />}
+    <span className={clsx('pill', status)}>
+      <span className={clsx(
+        'w-1.5 h-1.5 rounded-full',
+        status === 'ok' && 'bg-emerald-400',
+        status === 'bad' && 'bg-red-400',
+        status === 'warn' && 'bg-amber-400',
+        status === 'neutral' && 'bg-slate-400',
+        status === 'info' && 'bg-cyan-400',
+      )} />
       {text}
     </span>
   );

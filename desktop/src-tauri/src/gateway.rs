@@ -15,7 +15,7 @@ const SENSITIVE_KEYS: &[&str] = &[
     "STRIPE_SECRET_KEY",
 ];
 
-fn sanitize_output(text: &str) -> String {
+pub(crate) fn sanitize_output(text: &str) -> String {
     let mut lines = Vec::new();
     for line in text.lines() {
         let mut redacted_line = line.to_string();
@@ -76,6 +76,38 @@ pub struct BuildResult {
     pub success: bool,
     pub image_tag: String,
     pub logs: String,
+}
+
+// ── Gateway gating ──────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayError {
+    pub code: String,
+    pub title: String,
+    pub message: String,
+    pub diagnostics: String,
+}
+
+impl std::fmt::Display for GatewayError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}: {}", self.code, self.message)
+    }
+}
+
+impl From<GatewayError> for String {
+    fn from(e: GatewayError) -> String {
+        serde_json::to_string(&e).unwrap_or_else(|_| e.message.clone())
+    }
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct GatewayStatusResult {
+    pub container_stable: bool,
+    pub health_ok: bool,
+    pub version: Option<String>,
+    pub last_error: Option<GatewayError>,
 }
 
 // ── Container health (docker inspect) ───────────────────────────────
@@ -404,6 +436,11 @@ pub fn generate_compose_content(image: &str) -> String {
       - OPENCLAW_CONTAINER_PORT=8080
     restart: unless-stopped
 
+networks:
+  default:
+    name: openclaw-managed
+
+
 volumes:
   openclaw_home:
 "#,
@@ -411,7 +448,35 @@ volumes:
     )
 }
 
-// ── Tauri commands ──────────────────────────────────────────────────
+
+
+/// Ensure the openclaw-egress network exists (bridge).
+pub fn ensure_egress_network_exists() -> Result<(), String> {
+    let check = Command::new("docker")
+        .args(["network", "inspect", "openclaw-egress"])
+        .output();
+
+    // If it exists, we're good
+    if let Ok(out) = check {
+        if out.status.success() {
+            return Ok(());
+        }
+    }
+
+    // Create it
+    let create = Command::new("docker")
+        .args(["network", "create", "--driver", "bridge", "openclaw-egress"])
+        .output()
+        .map_err(|e| format!("Failed to create network: {}", e))?;
+
+    if !create.status.success() {
+        let stderr = String::from_utf8_lossy(&create.stderr);
+        return Err(format!("Failed to create openclaw-egress network: {}", stderr));
+    }
+
+    Ok(())
+}
+
 
 #[tauri::command]
 pub async fn is_gateway_running(app: AppHandle) -> Result<GatewayStartResult, String> {
@@ -487,6 +552,20 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     }
 
     // 2) Run docker compose up -d
+    // Also ensure egress network exists
+    if let Err(e) = ensure_egress_network_exists() {
+        return Ok(GatewayStartResult {
+            gateway_active: false,
+            status: "failed".into(),
+            user_friendly_title: "Network Creation Failed".into(),
+            user_friendly_message: format!("Could not create openclaw-egress network: {}", e),
+            raw_diagnostics: String::new(),
+            remediation_steps: vec!["Check Docker permissions.".into()],
+            compose_file_path: compose_file.display().to_string(),
+            warning: None,
+        });
+    }
+
     let output = Command::new("docker")
         .current_dir(&dir)
         .args(["compose", "up", "-d"])
@@ -820,6 +899,96 @@ pub async fn gateway_logs(app: AppHandle) -> Result<String, String> {
     Ok(sanitize_output(&combined))
 }
 
+// ── Gateway readiness guard ─────────────────────────────────────────
+
+/// Strict guard: gateway container stable + /health 200.
+/// Returns Ok(()) if ready, Err(GatewayError) otherwise.
+pub(crate) fn ensure_gateway_ready(app: &AppHandle) -> Result<(), GatewayError> {
+    let dir = match get_app_data_dir(app) {
+        Ok(d) => d,
+        Err(e) => return Err(GatewayError {
+            code: "GATEWAY_NOT_READY".into(),
+            title: "Gateway required".into(),
+            message: "Start the gateway to continue.".into(),
+            diagnostics: sanitize_output(&e),
+        }),
+    };
+
+    let (stable, diag) = check_gateway_strictly(&dir, false);
+    if !stable {
+        return Err(GatewayError {
+            code: "GATEWAY_NOT_READY".into(),
+            title: "Gateway required".into(),
+            message: "Start the gateway to continue.".into(),
+            diagnostics: sanitize_output(&diag),
+        });
+    }
+
+    let port = read_http_port(&dir);
+    let health = probe_health(port);
+    if !health.healthy {
+        return Err(GatewayError {
+            code: "GATEWAY_NOT_READY".into(),
+            title: "Gateway required".into(),
+            message: "Gateway container is running but /health is not responding.".into(),
+            diagnostics: sanitize_output(&health.error.unwrap_or_default()),
+        });
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_gateway_status(app: AppHandle) -> Result<GatewayStatusResult, String> {
+    let dir = get_app_data_dir(&app)?;
+    let (stable, diag) = check_gateway_strictly(&dir, false);
+
+    if !stable {
+        return Ok(GatewayStatusResult {
+            container_stable: false,
+            health_ok: false,
+            version: None,
+            last_error: Some(GatewayError {
+                code: "GATEWAY_NOT_READY".into(),
+                title: "Gateway required".into(),
+                message: "Start the gateway to continue.".into(),
+                diagnostics: sanitize_output(&diag),
+            }),
+        });
+    }
+
+    let port = read_http_port(&dir);
+    let health = probe_health(port);
+
+    // Try to extract version from health body (JSON field "version")
+    let version = if health.healthy {
+        health.body.split('"').enumerate()
+            .find(|(_, s)| *s == "version")
+            .and_then(|_| health.body.split('"').nth(3))
+            .map(|s| s.to_string())
+    } else {
+        None
+    };
+
+    let last_error = if health.healthy {
+        None
+    } else {
+        Some(GatewayError {
+            code: "GATEWAY_NOT_READY".into(),
+            title: "Gateway required".into(),
+            message: "Gateway container is running but /health is not responding.".into(),
+            diagnostics: sanitize_output(&health.error.unwrap_or_default()),
+        })
+    };
+
+    Ok(GatewayStatusResult {
+        container_stable: stable,
+        health_ok: health.healthy,
+        version,
+        last_error,
+    })
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1105,5 +1274,31 @@ mod tests {
         assert!(!should_try_pull_fallback("image not found"));
         assert!(!should_try_pull_fallback("connection refused"));
         assert!(!should_try_pull_fallback("manifest unknown"));
+    }
+
+    #[test]
+    fn test_gateway_error_serialization() {
+        let err = GatewayError {
+            code: "GATEWAY_NOT_READY".into(),
+            title: "Gateway required".into(),
+            message: "Start the gateway to continue.".into(),
+            diagnostics: "No container found".into(),
+        };
+        let json: String = err.clone().into();
+        assert!(json.contains("GATEWAY_NOT_READY"));
+        assert!(json.contains("Gateway required"));
+    }
+
+    #[test]
+    fn test_gateway_status_result_struct() {
+        let status = GatewayStatusResult {
+            container_stable: true,
+            health_ok: true,
+            version: Some("1.0.0".into()),
+            last_error: None,
+        };
+        assert!(status.container_stable);
+        assert!(status.health_ok);
+        assert_eq!(status.version, Some("1.0.0".to_string()));
     }
 }

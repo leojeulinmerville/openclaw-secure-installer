@@ -1,0 +1,105 @@
+﻿cargo :    
+Compiling 
+my_openclaw v0.1.0 (
+D:\MVP\openclaw-secu
+re-installer\desktop
+\src-tauri)
+Au caractère 
+Ligne:1 : 1
++ cargo test 2>&1 | 
+Out-File -FilePath d
+:\MVP\openclaw-secur
+e-installer ...
++ ~~~~~~~~~~~~~~~
+    + CategoryInfo  
+            : NotS  
+  pecified: (   C   
+ ompiling my...k    
+top\src-tauri):    
+String) [], Rem    
+oteException
+    + FullyQualifie 
+   dErrorId : Nati  
+  veCommandError
+ 
+warning: hard 
+linking files in 
+the incremental 
+compilation cache 
+failed. copying 
+files instead. 
+consider moving the 
+cache directory to 
+a file system which 
+supports hard 
+linking in session 
+dir `\\?\D:\MVP\open
+claw-secure-installe
+r\desktop\src-tauri\
+target\debug\increme
+ntal\my_openclaw-16n
+mu78wwol35\s-hfonwmm
+6e5-1wluqae-working`
+
+warning: 
+`my_openclaw` (bin 
+"my_openclaw" test) 
+generated 1 warning
+    Finished `test` 
+profile 
+[unoptimized + 
+debuginfo] 
+target(s) in 16.25s
+     Running 
+unittests 
+src\main.rs (target\
+debug\deps\my_opencl
+aw-9401f795fdc0a44a.
+exe)
+
+running 42 tests
+test agents::tests::test_network_toggle_state ... ok
+test gateway::tests::test_build_remediation_exit_127_without_log_text ... ok
+test agents::tests::test_parse_memory_mb_bytes ... ok
+test gateway::tests::test_generate_compose_uses_custom_image ... ok
+test gateway::tests::test_extract_exit_code_from_inspect ... ok
+test gateway::tests::test_build_remediation_generic_error ... ok
+test agents::tests::test_parse_memory_mb_kib ... ok
+test agents::tests::test_agent_entry_deserialization_backwards_compat ... ok
+test agents::tests::test_agent_entry_serialization ... ok
+test agents::tests::test_parse_memory_mb_mib ... ok
+test agents::tests::test_quarantine_state_transition ... ok
+test agents::tests::test_short_id ... ok
+test agents::tests::test_unquarantine_state_transition ... ok
+test agents::tests::test_container_name_deterministic ... ok
+test agents::tests::test_container_name_format ... ok
+test gateway::tests::test_build_remediation_module_not_found ... ok
+test gateway::tests::test_build_remediation_pull_access_denied ... ok
+test gateway::tests::test_compose_has_container_port_env ... ok
+test gateway::tests::test_compose_maps_host_to_container_8080 ... ok
+test gateway::tests::test_build_remediation_node_not_found ... ok
+test gateway::tests::test_gateway_result_status_values ... ok
+test gateway::tests::test_generate_compose_uses_local_dev_image ... ok
+test gateway::tests::test_is_healthy_exited_is_false ... ok
+test agents::tests::test_parse_memory_mb_gib ... ok
+test gateway::tests::test_is_healthy_restarting_status_is_false ... ok
+test gateway::tests::test_is_module_not_found ... ok
+test gateway::tests::test_is_node_not_found ... ok
+test gateway::tests::test_is_pull_access_error_detects_patterns ... ok
+test gateway::tests::test_sanitize_output_redacts_bearer_tokens ... ok
+test gateway::tests::test_is_healthy_restarting_is_false ... ok
+test gateway::tests::test_sanitize_output_handles_multiple_lines ... ok
+test gateway::tests::test_is_healthy_running_stable ... ok
+test gateway::tests::test_read_http_port_defaults_to_80 ... ok
+test gateway::tests::test_sanitize_output_redacts_api_keys ... ok
+test gateway::tests::test_should_try_pull_fallback ... ok
+test state_manager::tests::test_default_state_values ... ok
+test state_manager::tests::test_port_migration_legacy_defaults ... ok
+test state_manager::tests::test_state_backwards_compat_missing_image ... ok
+test state_manager::tests::test_port_migration_advanced_keeps_privileged ... ok
+test state_manager::tests::test_state_serialization ... ok
+test gateway::tests::test_read_http_port_parses_env ... ok
+test agents::tests::test_agent_inspect_not_found_status ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
