@@ -36,8 +36,8 @@ pnpm -C desktop tauri:build
 
 | Format | Path |
 |--------|------|
-| MSI | `desktop/src-tauri/target/release/bundle/msi/OpenClaw Secure Installer_0.1.6_x64_en-US.msi` |
-| NSIS | `desktop/src-tauri/target/release/bundle/nsis/OpenClaw Secure Installer_0.1.6_x64-setup.exe` |
+| MSI | `desktop/src-tauri/target/release/bundle/msi/OpenClaw Secure Installer_0.1.8_x64_en-US.msi` |
+| NSIS | `desktop/src-tauri/target/release/bundle/nsis/OpenClaw Secure Installer_0.1.8_x64-setup.exe` |
 
 ---
 
@@ -85,11 +85,11 @@ pnpm -C desktop tauri:build
 Push a semver tag to trigger the `gateway-publish.yml` workflow:
 
 ```bash
-git tag v0.1.6
-git push origin v0.1.6
+git tag v0.1.8
+git push origin v0.1.8
 ```
 
-This builds `ghcr.io/leojeulinmerville/openclaw-gateway:0.1.6` + `:stable` + `:sha-<commit>`.
+This builds `ghcr.io/leojeulinmerville/openclaw-gateway:0.1.8` + `:stable` + `:sha-<commit>`.
 
 ### Manual
 

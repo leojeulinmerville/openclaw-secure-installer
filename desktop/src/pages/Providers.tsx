@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { setSecret, hasSecret, deleteSecret } from '../lib/tauri';
+import { invoke, setSecret, hasSecret, deleteSecret } from '../lib/tauri';
 import {
   Key, Eye, EyeOff, Check, Trash2, TestTube, Server, Loader2
 } from 'lucide-react';
@@ -126,6 +126,59 @@ export function Providers() {
 
       {/* ── Ollama ─────────────────────────────────────────────── */}
       <OllamaWizard />
+
+      {/* ── Container Lifecycle ────────────────────────────────── */}
+      <LifecycleSettings />
+    </div>
+  );
+}
+
+function LifecycleSettings() {
+  const [stopAgents, setStopAgents] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Load initial state
+    invoke<any>('get_state').then(state => {
+        setStopAgents(state.stop_agents_on_gateway_stop || false);
+        setLoading(false);
+    });
+  }, []);
+
+  const toggle = async () => {
+     const newValue = !stopAgents;
+     setStopAgents(newValue);
+     await invoke('set_stop_agents_on_gateway_stop', { enabled: newValue });
+  };
+
+  return (
+    <div className="glass-panel p-5 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-500/15 rounded-lg flex items-center justify-center">
+            <Server className="w-4 h-4 text-blue-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-white">Container Lifecycle</h3>
+            <p className="text-xs text-white/30">Manage how Docker containers behave.</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between bg-white/5 p-3 rounded-lg">
+            <div className="space-y-1">
+                <p className="text-sm text-white font-medium">Stop Agents with Gateway</p>
+                <p className="text-xs text-white/50">
+                    When you stop the Gateway, also stop all running Agent containers.
+                </p>
+            </div>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin text-white/30" /> : (
+            <button 
+                onClick={toggle}
+                className={`w-10 h-5 rounded-full relative transition-colors ${stopAgents ? 'bg-green-500' : 'bg-white/10'}`}
+            >
+                <div className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${stopAgents ? 'left-6' : 'left-1'}`} />
+            </button>
+            )}
+        </div>
     </div>
   );
 }

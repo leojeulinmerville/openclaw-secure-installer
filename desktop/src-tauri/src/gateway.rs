@@ -3,7 +3,7 @@ use std::path::Path;
 // use std::process::Command;
 use tauri::AppHandle;
 
-use crate::state_manager::get_app_data_dir;
+use crate::state_manager::{get_app_data_dir, load_state, save_state_internal};
 
 // ── Redaction pipeline ──────────────────────────────────────────────
 
@@ -855,6 +855,21 @@ pub async fn open_app_data_folder(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn stop_gateway(app: AppHandle) -> Result<String, String> {
     let dir = get_app_data_dir(&app)?;
+
+    // Check if we should stop agents
+    let mut state = load_state(&app);
+    if state.stop_agents_on_gateway_stop {
+        for agent in &mut state.agents {
+             if !agent.container_name.is_empty() {
+                 // Best effort stop
+                 let _ = crate::process::run_docker(&["stop", "-t", "5", &agent.container_name], None);
+                 agent.status = "stopped".to_string();
+             }
+        }
+        // Save state updates
+        let _ = save_state_internal(&app, &state);
+    }
+
     let output = crate::process::run_docker(&["compose", "down"], Some(&dir))
         .map_err(|e| e.to_string())?;
 

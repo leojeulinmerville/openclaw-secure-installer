@@ -34,6 +34,8 @@ pub struct InstallerState {
   /// and agent egress networking.
   #[serde(default)]
   pub allow_internet: bool,
+  #[serde(default)]
+  pub stop_agents_on_gateway_stop: bool,
 }
 
 fn default_gateway_image() -> String {
@@ -54,6 +56,7 @@ impl Default for InstallerState {
       advanced_ports: false,
       agents: Vec::new(),
       allow_internet: false,
+      stop_agents_on_gateway_stop: false,
     }
   }
 }
@@ -229,6 +232,14 @@ pub async fn set_allow_internet(app: AppHandle, enabled: bool) -> Result<(), Str
         crate::gateway::ensure_egress_network_exists()?;
     }
 
+    save_state_internal(&app, &state)?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_stop_agents_on_gateway_stop(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let mut state = load_state(&app);
+    state.stop_agents_on_gateway_stop = enabled;
     save_state_internal(&app, &state)?;
     Ok(())
 }

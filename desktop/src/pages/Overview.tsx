@@ -1,3 +1,4 @@
+import { RuntimeCard } from '../components/OverviewRuntimeCard';
 import { formatCost } from '../lib/format';
 import type { Alert } from '../types';
 import { StatusPill } from '../components/StatusPill';
@@ -89,6 +90,11 @@ export function Overview() {
       </section>
 
       {/* ── Security Posture ────────────────────────────────────── */}
+      <section>
+        <h3 className="text-xs font-semibold text-white/30 uppercase tracking-wider mb-3">Runtime Control</h3>
+        <RuntimeCard />
+      </section>
+
       <section>
         <h3 className="text-xs font-semibold text-white/30 uppercase tracking-wider mb-3">Security Posture</h3>
         <div className="grid grid-cols-3 gap-3">

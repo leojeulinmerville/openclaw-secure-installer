@@ -41,6 +41,96 @@ pub struct OpenAIUsage {
     pub total_tokens: u32,
 }
 
+#[derive(Deserialize, Debug)]
+struct OllamaTagsResponse {
+    models: Vec<OllamaModel>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct OllamaModel {
+    pub name: String,
+    pub size: u64,
+    pub digest: String,
+}
+
+#[tauri::command]
+pub async fn ollama_test(endpoint: String) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    // Just check version or tags to verify connectivity
+    let url = format!("{}/api/version", endpoint.trim_end_matches('/'));
+    
+    match client.get(&url).send().await {
+        Ok(res) => {
+            if res.status().is_success() {
+                Ok("ok".to_string())
+            } else {
+                Err(format!("Ollama returned status: {}", res.status()))
+            }
+        },
+        Err(e) => Err(format!("Connection failed: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn ollama_list_models(endpoint: String) -> Result<Vec<OllamaModel>, String> {
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/tags", endpoint.trim_end_matches('/'));
+    
+    match client.get(&url).send().await {
+        Ok(res) => {
+            if res.status().is_success() {
+                let tags: OllamaTagsResponse = res.json().await.map_err(|e| e.to_string())?;
+                Ok(tags.models)
+            } else {
+                Err(format!("Ollama returned status: {}", res.status()))
+            }
+        },
+        Err(e) => Err(format!("Connection failed: {}", e)),
+    }
+}
+
+#[tauri::command]
+pub async fn ollama_pull_model(app: tauri::AppHandle, endpoint: String, model: String) -> Result<(), String> {
+    // This needs to be a long-running task that emits events
+    use tauri::Emitter;
+    use futures_util::StreamExt;
+
+    let client = reqwest::Client::new();
+    let url = format!("{}/api/pull", endpoint.trim_end_matches('/'));
+    let body = json!({ "name": model }); // keep struct simple for now
+
+    let res = client.post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    if !res.status().is_success() {
+         return Err(format!("Pull failed with status: {}", res.status()));
+    }
+
+    let mut stream = res.bytes_stream();
+    
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(chunk) => {
+                // Parse potential multiple JSON objects in one chunk
+                let s = String::from_utf8_lossy(&chunk);
+                for line in s.lines() {
+                    if !line.trim().is_empty() {
+                        if let Ok(val) = serde_json::from_str::<serde_json::Value>(line) {
+                             let _ = app.emit("ollama-pull-progress", val); 
+                        }
+                    }
+                }
+            },
+            Err(_) => break, // stream error
+        }
+    }
+
+    Ok(())
+}
+
 impl LlmClient {
     pub fn new(provider: &str, model: &str, api_base: Option<String>, api_key: Option<String>) -> Self {
         Self {
@@ -75,8 +165,20 @@ impl LlmClient {
                 .await?;
 
             if !res.status().is_success() {
+                 let status = res.status();
                  let err_text = res.text().await?;
-                 return Err(format!("OpenAI API Error: {}", err_text).into());
+                 
+                 // User-friendly error mapping
+                 if status == reqwest::StatusCode::UNAUTHORIZED {
+                     return Err(format!("Invalid API Key. Please check your settings. Details: {}", err_text).into());
+                 } else if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.as_u16() == 429 {
+                      if err_text.contains("insufficient_quota") {
+                           return Err("Insufficient Quota. Please add consumption credits at platform.openai.com.".into());
+                      }
+                      return Err("Rate Limit Exceeded. Please try again later.".into());
+                 }
+
+                 return Err(format!("OpenAI API Error ({}): {}", status, err_text).into());
             }
 
             let response: OpenAIResponse = res.json().await?;
@@ -108,14 +210,13 @@ impl LlmClient {
 
             // Ollama response structure
             #[derive(Deserialize)]
-            struct OllamaResponse {
+            struct OllamaIO {
                 message: OpenAIMessage,
-                // usage fields in ollama are: prompt_eval_count, eval_count
                 prompt_eval_count: Option<u32>,
                 eval_count: Option<u32>,
             }
             
-            let response: OllamaResponse = res.json().await?;
+            let response: OllamaIO = res.json().await?;
             let usage = Some(OpenAIUsage {
                 prompt_tokens: response.prompt_eval_count.unwrap_or(0),
                 completion_tokens: response.eval_count.unwrap_or(0),

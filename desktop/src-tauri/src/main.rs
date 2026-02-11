@@ -26,6 +26,7 @@ fn main() {
         state_manager::save_gateway_image,
         state_manager::get_allow_internet,
         state_manager::set_allow_internet,
+        state_manager::set_stop_agents_on_gateway_stop,
         secrets::set_secret,
         secrets::has_secret,
         secrets::delete_secret,
@@ -58,6 +59,9 @@ fn main() {
         // Chat
         chat::chat_send,
         chat::test_ollama_connection,
+        llm::ollama_test,
+        llm::ollama_list_models,
+        llm::ollama_pull_model,
         // Runs
         runs::create_run,
         runs::list_runs,

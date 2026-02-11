@@ -131,3 +131,7 @@ export const readWorkspaceFile = (runId: string, relativePath: string) =>
     invoke<string>('read_workspace_file', { runId, relativePath });
 
 export const openExternal = (url: string) => open(url);
+
+export const setStopAgentsOnGatewayStop = (enabled: boolean) => invoke<void>('set_stop_agents_on_gateway_stop', { enabled });
+
+export { invoke };
