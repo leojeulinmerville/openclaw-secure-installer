@@ -171,7 +171,7 @@ function OllamaWizard() {
       // For now, let's just use the existing logic but frame it as "Gateway Connection"
       
       // TODO: Actual Gateway-side check implementation
-      // For MVP v0.1.6, we might just re-verify the "host.docker.internal" connectivity
+      // For MVP v0.1.8, we might just re-verify the "host.docker.internal" connectivity
       // via `test_ollama_connection` backend command if it existed, or just fetch via gateway proxy if we had one.
       // Wait, `testOllamaConnection` exists in lib/tauri.ts calling `test_ollama_connection`.
       // Let's assume that checks from backend (Rust) -> Ollama.

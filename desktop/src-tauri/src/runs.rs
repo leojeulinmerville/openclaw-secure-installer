@@ -234,7 +234,7 @@ async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model
     if provider == "openai" {
         if !allow_internet {
              let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": "Internet disabled. Cannot use OpenAI." }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("Internet disabled".to_string()));
+             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("Internet disabled".to_string())).await;
              return;
         }
         
@@ -245,7 +245,7 @@ async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model
         }
         if api_key.is_none() {
              let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": "OpenAI API Key not found. Please set it in Settings." }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("No API Key".to_string()));
+             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("No API Key".to_string())).await;
              return;
         }
     }
@@ -256,7 +256,7 @@ async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model
         Ok(tree) => tree,
         Err(e) => {
              let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Failed to read workspace: {}", e) }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e));
+             let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e)).await;
              return;
         }
     };
@@ -287,7 +287,7 @@ Do not include any other text outside these sections.
     let client = LlmClient::new(provider, model, None, api_key);
     match client.complete(&system_prompt, prompt).await {
         Ok((content, usage)) => {
-             let _ = _append_event(app, run_id, "llm.completed", serde_json::json!({ "usage": usage }));
+             let _ = _append_event(app, run_id, "llm.completed", serde_json::json!({ "usage": format!("{:?}", usage) }));
              
              // 4. Parse Response
              // Helper regex or split
@@ -320,11 +320,11 @@ Do not include any other text outside these sections.
                  "risk_level": "medium"
              }));
 
-             let _ = update_run_status(app, run_id, RunStatus::Blocked, None);
+             let _ = update_run_status(app, run_id, RunStatus::Blocked, None).await;
         }
         Err(e) => {
              let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": e.to_string() }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e.to_string()));
+             let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e.to_string())).await;
         }
     }
 
@@ -371,7 +371,7 @@ fn parse_artifacts(content: &str) -> (String, String, String) {
     (summary, patch, verify)
 }
 
-fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, error: Option<String>) -> Result<(), String> {
+async fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, error: Option<String>) -> Result<(), String> {
      if let Ok(mut run) = get_run(app.clone(), run_id.to_string()).await {
          run.status = status;
          run.error = error;
@@ -455,7 +455,7 @@ async fn real_resume_execution(app: &AppHandle, run_id: &str) {
     let patch_path = runs_dir.join(run_id).join("artifacts").join("PATCH.diff");
 
     if !patch_path.exists() {
-         let _ = update_run_status(app, run_id, RunStatus::Failed, Some("Patch file not found".to_string()));
+         let _ = update_run_status(app, run_id, RunStatus::Failed, Some("Patch file not found".to_string())).await;
          return;
     }
 
@@ -465,12 +465,12 @@ async fn real_resume_execution(app: &AppHandle, run_id: &str) {
              
              if result.applied {
                   let _ = _append_event(app, run_id, "patch.apply.succeeded", serde_json::json!({ "files": result.modified_files }));
-                  let _ = update_run_status(app, run_id, RunStatus::Done, None);
+                  let _ = update_run_status(app, run_id, RunStatus::Done, None).await;
                   let _ = _append_event(app, run_id, "run.completed", serde_json::json!({}));
              } else {
                   let err = result.error.unwrap_or("Unknown error".to_string());
-                  let _ = _append_event(app, run_id, "patch.apply.failed", serde_json::json!({ "error": err }));
-                  let _ = update_run_status(app, run_id, RunStatus::Failed, Some(err));
+                  let _ = _append_event(app, run_id, "patch.apply.failed", serde_json::json!({ "error": err.clone() }));
+                  let _ = update_run_status(app, run_id, RunStatus::Failed, Some(err)).await;
              }
          }
     }

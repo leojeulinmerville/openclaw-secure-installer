@@ -9,7 +9,7 @@ mod agents;
 mod chat;
 mod runs;
 mod patch;
-mod llm;
+pub mod llm;
 
 fn main() {
   tauri::Builder::default()
