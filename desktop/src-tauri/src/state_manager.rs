@@ -217,9 +217,10 @@ pub async fn set_allow_internet(app: AppHandle, enabled: bool) -> Result<(), Str
         for agent in &mut state.agents {
             if agent.network_enabled {
                 // Try to disconnect from egress network
-                let _ = std::process::Command::new("docker")
-                    .args(["network", "disconnect", "--force", "openclaw-egress", &agent.container_name])
-                    .output();
+                let _ = crate::process::run_docker(
+                    &["network", "disconnect", "--force", "openclaw-egress", &agent.container_name],
+                    None,
+                );
                 agent.network_enabled = false;
             }
         }

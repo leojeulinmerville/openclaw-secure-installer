@@ -33,7 +33,7 @@ export function Policies() {
       </section>
 
       {/* Cost Caps */}
-      <section className="glass-panel p-5 space-y-3">
+      <section className="glass-panel p-5 space-y-3 opacity-75">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-amber-500/15 rounded-lg flex items-center justify-center">
             <DollarSign className="w-4 h-4 text-amber-400" />
@@ -42,6 +42,7 @@ export function Policies() {
             <h3 className="text-sm font-bold text-white">Cost Caps</h3>
             <p className="text-xs text-white/30">Daily spending limits to prevent runaway costs.</p>
           </div>
+          <span className="pill neutral ml-auto">Coming in v1.1.0</span>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -55,7 +56,7 @@ export function Policies() {
         </div>
         <div className="flex items-start gap-2 text-xs text-white/25 bg-white/[0.02] p-2 rounded-lg">
           <Info className="w-3 h-3 mt-0.5 shrink-0" />
-          <span>Cost tracking requires OpenAI usage API. Will be enforced in M4.</span>
+          <span>Cost tracking requires OpenAI usage API. Will be available in next release.</span>
         </div>
       </section>
 

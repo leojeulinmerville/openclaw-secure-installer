@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Page } from './types';
 import { Sidebar } from './components/layout/Sidebar';
 import { Overview } from './pages/Overview';
@@ -10,42 +10,23 @@ import { Settings } from './pages/Settings';
 import CreateAgent from './pages/CreateAgent';
 import AgentDetail from './pages/AgentDetail';
 import Chat from './pages/Chat';
-import { getGatewayStatus } from './lib/tauri';
+import { Runs } from './pages/Runs';
+import { RunDetail } from './pages/RunDetail';
+import { CreateRun } from './pages/CreateRun';
+import { Setup } from './pages/Setup';
+import { ConnectOllama } from './pages/ConnectOllama';
 import { GatewayBanner } from './components/GatewayBanner';
-import type { GatewayStatusResult } from './types';
+import { DesktopProvider, useDesktop } from './contexts/DesktopContext';
 
-export default function App() {
+function AppContent() {
   const [page, setPage] = useState<Page>('overview');
   const [agentDetailId, setAgentDetailId] = useState<string | null>(null);
-  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatusResult | null>(null);
+  const { gatewayStatus } = useDesktop();
 
   // Navigation helper that accepts optional detail param
   const navigate = (p: Page, detail?: string) => {
     setPage(p);
     if (detail) setAgentDetailId(detail);
-  };
-
-  // Periodic gateway status check for the sidebar indicator
-  useEffect(() => {
-    checkGateway();
-    const interval = setInterval(checkGateway, 5000); // Check every 5s for responsiveness
-    return () => clearInterval(interval);
-  }, []);
-
-  const checkGateway = async () => {
-    try {
-      const status = await getGatewayStatus();
-      setGatewayStatus(status);
-    } catch (e) {
-      console.error("Gateway poll failed:", e);
-      // If poll fails, assume down
-      setGatewayStatus({
-        containerStable: false,
-        healthOk: false,
-        version: null,
-        lastError: null
-      });
-    }
   };
 
   const renderPage = () => {
@@ -62,6 +43,14 @@ export default function App() {
       case 'activity':      return <Activity />;
       case 'settings':      return <Settings />;
       case 'chat':          return <Chat />;
+      case 'runs':          return <Runs onNavigate={navigate} />;
+      case 'create-run':    return <CreateRun onNavigate={navigate} />;
+      case 'run-detail':
+          return agentDetailId 
+            ? <RunDetail runId={agentDetailId} onNavigate={() => navigate('runs')} />
+            : <Runs onNavigate={navigate} />;
+      case 'setup':         return <Setup onNavigate={navigate} />;
+      case 'connect-ollama': return <ConnectOllama onBack={() => navigate('providers')} onConnected={() => navigate('providers')} />;
       default:              return <Overview />;
     }
   };
@@ -70,7 +59,7 @@ export default function App() {
 
   return (
     <div className="app-shell flex flex-col h-screen overflow-hidden">
-      <GatewayBanner status={gatewayStatus} onRefresh={checkGateway} />
+      <GatewayBanner />
       <div className="flex-1 flex overflow-hidden">
         <Sidebar page={page} onNavigate={navigate} gatewayOk={!!isGatewayOk} />
         <main className="main-content custom-scroll flex-1 bg-gradient-to-br from-gray-900 to-black relative">
@@ -78,5 +67,13 @@ export default function App() {
         </main>
       </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <DesktopProvider>
+      <AppContent />
+    </DesktopProvider>
   );
 }

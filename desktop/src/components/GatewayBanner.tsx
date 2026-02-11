@@ -1,19 +1,14 @@
 import { AlertTriangle, Play, Loader2, X } from 'lucide-react';
 import { useState } from 'react';
-import { startGateway } from '../lib/tauri';
-import type { GatewayStatusResult } from '../types';
+import { useDesktop } from '../contexts/DesktopContext';
 
-interface GatewayBannerProps {
-  status: GatewayStatusResult | null;
-  onRefresh: () => void;
-}
-
-export function GatewayBanner({ status, onRefresh }: GatewayBannerProps) {
+export function GatewayBanner() {
+  const { gatewayStatus, startGateway, refresh } = useDesktop();
   const [starting, setStarting] = useState(false);
   const [minimized, setMinimized] = useState(false);
 
   // If status is null (loading) or healthy, show nothing
-  if (!status || (status.containerStable && status.healthOk)) {
+  if (!gatewayStatus || (gatewayStatus.containerStable && gatewayStatus.healthOk)) {
     return null;
   }
 
@@ -36,8 +31,8 @@ export function GatewayBanner({ status, onRefresh }: GatewayBannerProps) {
     setStarting(true);
     try {
       await startGateway();
-      // Wait a moment for startup then refresh
-      setTimeout(onRefresh, 2000);
+      // Wait a moment then refresh
+      setTimeout(refresh, 2000);
     } catch (e) {
       console.error(e);
     } finally {
@@ -45,8 +40,8 @@ export function GatewayBanner({ status, onRefresh }: GatewayBannerProps) {
     }
   };
 
-  const isContainerRunning = status.containerStable;
-  const isHealthCheckFailed = isContainerRunning && !status.healthOk;
+  const isContainerRunning = gatewayStatus.containerStable;
+  const isHealthCheckFailed = isContainerRunning && !gatewayStatus.healthOk;
 
   const title = isHealthCheckFailed
     ? "Gateway Unhealthy"
@@ -66,8 +61,8 @@ export function GatewayBanner({ status, onRefresh }: GatewayBannerProps) {
           <div>
             <h3 className="text-sm font-bold text-white">{title}</h3>
             <p className="text-xs text-white/60">{message}</p>
-            {status.lastError && (
-               <p className="text-[10px] text-red-300/50 mt-1 font-mono">{status.lastError.message}</p>
+            {gatewayStatus.lastError && (
+               <p className="text-[10px] text-red-300/50 mt-1 font-mono">{gatewayStatus.lastError.message}</p>
             )}
           </div>
         </div>

@@ -1,5 +1,6 @@
 // Typed wrappers around Tauri invoke calls.
 import { invoke } from '@tauri-apps/api/core';
+import { open } from '@tauri-apps/plugin-shell';
 import type {
   CheckDockerResult,
   InstallerState,
@@ -101,3 +102,32 @@ export const chatSend = (request: ChatRequest) =>
 
 export const testOllamaConnection = (endpoint?: string) =>
   invoke<boolean>('test_ollama_connection', { endpoint });
+
+// ── Runs ────────────────────────────────────────────────────────────
+import type { Run, RunEvent } from '../types';
+
+export const createRun = (
+  agentId: string,
+  provider: string,
+  model: string,
+  title: string,
+  userGoal: string,
+  workspacePath: string
+) => invoke<Run>('create_run', { request: { agentId, provider, model, title, userGoal, workspacePath } });
+
+export const listRuns = () => invoke<Run[]>('list_runs');
+
+export const getRun = (runId: string) => invoke<Run>('get_run', { runId });
+
+export const getRunEvents = (runId: string) => invoke<RunEvent[]>('get_run_events', { runId });
+
+export const startRun = (runId: string) => invoke<Run>('start_run', { runId });
+
+export const submitApproval = (runId: string, approvalId: string, decision: 'approved' | 'rejected') => 
+    invoke<Run>('submit_approval', { runId, approvalId, decision });
+
+
+export const readWorkspaceFile = (runId: string, relativePath: string) => 
+    invoke<string>('read_workspace_file', { runId, relativePath });
+
+export const openExternal = (url: string) => open(url);

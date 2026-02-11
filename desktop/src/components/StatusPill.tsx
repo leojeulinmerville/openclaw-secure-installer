@@ -1,7 +1,7 @@
 import clsx from 'clsx';
 
 interface StatusPillProps {
-  status: 'ok' | 'bad' | 'warn' | 'neutral' | 'info';
+  status: 'ok' | 'bad' | 'warn' | 'neutral' | 'info' | 'loading' | 'testing';
   text: string;
 }
 
@@ -15,6 +15,8 @@ export function StatusPill({ status, text }: StatusPillProps) {
         status === 'warn' && 'bg-amber-400',
         status === 'neutral' && 'bg-slate-400',
         status === 'info' && 'bg-cyan-400',
+        status === 'loading' && 'bg-white/50 animate-pulse',
+        status === 'testing' && 'bg-violet-400 animate-pulse',
       )} />
       {text}
     </span>

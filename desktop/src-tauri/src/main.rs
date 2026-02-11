@@ -4,8 +4,12 @@ mod docker_check;
 mod state_manager;
 mod secrets;
 mod gateway;
+mod process;
 mod agents;
 mod chat;
+mod runs;
+mod patch;
+mod llm;
 
 fn main() {
   tauri::Builder::default()
@@ -54,6 +58,14 @@ fn main() {
         // Chat
         chat::chat_send,
         chat::test_ollama_connection,
+        // Runs
+        runs::create_run,
+        runs::list_runs,
+        runs::get_run,
+        runs::get_run_events,
+        runs::start_run,
+        runs::submit_approval,
+        runs::read_workspace_file,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

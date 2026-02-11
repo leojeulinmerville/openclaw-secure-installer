@@ -43,21 +43,21 @@ impl CheckDockerResult {
 }
 
 fn run_cmd(exe: &str, args: &[&str]) -> CmdOutput {
-  let output = Command::new(exe).args(args).output();
-  match output {
+  let result = crate::process::run_command_capture(exe, args, None);
+  match result {
     Ok(output) => CmdOutput {
-      status: output.status.code(),
-      stdout: truncate_output(&String::from_utf8_lossy(&output.stdout)),
-      stderr: truncate_output(&String::from_utf8_lossy(&output.stderr)),
+      status: Some(output.exit_code),
+      stdout: truncate_output(&output.stdout),
+      stderr: truncate_output(&output.stderr),
       error: None,
       not_found: false,
     },
-    Err(err) => CmdOutput {
+    Err(err_msg) => CmdOutput {
       status: None,
       stdout: String::new(),
       stderr: String::new(),
-      error: Some(err.to_string()),
-      not_found: err.kind() == ErrorKind::NotFound,
+      error: Some(err_msg.clone()),
+      not_found: err_msg.to_lowercase().contains("not found") || err_msg.contains("os error 2"),
     },
   }
 }

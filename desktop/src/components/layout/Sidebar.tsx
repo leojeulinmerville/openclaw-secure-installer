@@ -8,6 +8,7 @@ import {
   Settings,
   Cloudy,
   MessageCircle,
+  Play,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -21,6 +22,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutDashboard }[] =
   { page: 'overview',  label: 'Overview',   icon: LayoutDashboard },
   { page: 'providers', label: 'Providers',  icon: Cloudy },
   { page: 'agents',    label: 'Agents',     icon: Bot },
+  { page: 'runs',      label: 'Runs',       icon: Play },
   { page: 'chat',      label: 'Chat',       icon: MessageCircle },
   { page: 'policies',  label: 'Policies',   icon: Shield },
   { page: 'activity',  label: 'Activity',   icon: Activity },

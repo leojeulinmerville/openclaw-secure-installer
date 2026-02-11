@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { BuildResult, GatewayStartResult, PullTestResult } from '../types';
+import { BuildResult, GatewayStartResult, PullTestResult } from '../../types';
 import { GlassCard } from '../GlassCard';
 import { StatusPill } from '../StatusPill';
-import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Copy, Play, RefreshCw, Terminal } from 'lucide-react';
+import { AlertCircle, ChevronDown, ChevronUp, Copy, Play, RefreshCw, Terminal } from 'lucide-react';
 import clsx from 'clsx';
 
 interface Step3Props {

@@ -1,0 +1,82 @@
+   Compiling my_openclaw v0.1.6 (D:\MVP\openclaw-secure-installer\desktop\src-tauri)
+warning: hard linking files in the incremental compilation cache failed. copying files instead. consider moving the cache directory to a file system which supports hard linking in session dir `\\?\D:\MVP\openclaw-secure-installer\desktop\src-tauri\target\debug\incremental\my_openclaw-3k8xta6jjs1jc\s-hfos1z5w04-09behf0-working`
+
+error[E0433]: failed to resolve: use of unresolved module or unlinked crate `tokio`
+   --> src\runs.rs:222:9
+    |
+222 |     use tokio::time::{sleep, Duration};
+    |         ^^^^^ use of unresolved module or unlinked crate `tokio`
+    |
+    = help: if you wanted to use a crate named `tokio`, use `cargo add tokio` to add it to your `Cargo.toml`
+
+warning: unused import: `std::io::ErrorKind`
+ --> src\docker_check.rs:2:5
+  |
+2 | use std::io::ErrorKind;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::process::Command`
+ --> src\docker_check.rs:4:5
+  |
+4 | use std::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Path`
+ --> src\runs.rs:3:17
+  |
+3 | use std::path::{Path, PathBuf};
+  |                 ^^^^
+
+warning: unused import: `State`
+ --> src\runs.rs:4:33
+  |
+4 | use tauri::{AppHandle, Manager, State};
+  |                                 ^^^^^
+
+warning: unused import: `std::fs`
+ --> src\patch.rs:1:5
+  |
+1 | use std::fs;
+  |     ^^^^^^^
+
+warning: unused import: `PathBuf`
+ --> src\patch.rs:2:23
+  |
+2 | use std::path::{Path, PathBuf};
+  |                       ^^^^^^^
+
+warning: unused import: `std::io::Write`
+ --> src\patch.rs:3:5
+  |
+3 | use std::io::Write;
+  |     ^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+  --> src\patch.rs:32:9
+   |
+32 |     let mut modified_files: Vec<String> = Vec::new();
+   |         ----^^^^^^^^^^^^^^
+   |         |
+   |         help: remove this `mut`
+   |
+   = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `patch_content`
+  --> src\patch.rs:14:49
+   |
+14 | pub fn apply_patch_safely(workspace_path: &str, patch_content: &str) -> PatchResult {
+   |                                                 ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_patch_content`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `modified_files`
+  --> src\patch.rs:32:9
+   |
+32 |     let mut modified_files: Vec<String> = Vec::new();
+   |         ^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_modified_files`
+
+For more information about this error, try `rustc --explain E0433`.
+warning: `my_openclaw` (bin "my_openclaw") generated 11 warnings
+error: could not compile `my_openclaw` (bin "my_openclaw") due to 1 previous error; 11 warnings emitted

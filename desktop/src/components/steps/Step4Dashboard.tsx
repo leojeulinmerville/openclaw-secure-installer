@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { GlassCard } from '../GlassCard';
 import { StatusPill } from '../StatusPill';
-import { GatewayStartResult, HealthCheckResult } from '../types';
+import { GatewayStartResult, HealthCheckResult } from '../../types';
 import { Activity, ExternalLink, FileText, FolderOpen, Power, RefreshCw } from 'lucide-react';
 
 interface Step4Props {

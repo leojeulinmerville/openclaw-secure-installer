@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::path::Path;
-use std::process::Command;
+// use std::process::Command;
 use tauri::AppHandle;
 
 use crate::state_manager::get_app_data_dir;
@@ -123,30 +123,27 @@ struct ContainerHealth {
 
 /// Resolve the gateway container ID via `docker compose ps -q gateway`.
 fn resolve_container_id(dir: &Path) -> Option<String> {
-    let output = Command::new("docker")
-        .current_dir(dir)
-        .args(["compose", "ps", "-q", "gateway"])
-        .output()
-        .ok()?;
-    let id = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let output = crate::process::run_docker(&["compose", "ps", "-q", "gateway"], Some(dir)).ok()?;
+    let id = output.stdout.trim().to_string();
     if id.is_empty() { None } else { Some(id) }
 }
 
 /// Inspect container state via `docker inspect`.
 /// Returns `(status, restarting, exit_code)` from the Go template.
 fn inspect_container(container_id: &str) -> ContainerHealth {
-    let output = Command::new("docker")
-        .args([
+    let output = crate::process::run_docker(
+        &[
             "inspect",
             "--format",
             "{{.State.Status}}|{{.State.Restarting}}|{{.State.ExitCode}}",
             container_id,
-        ])
-        .output();
+        ],
+        None,
+    );
 
     match output {
         Ok(out) => {
-            let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+            let raw = out.stdout.trim().to_string();
             let parts: Vec<&str> = raw.split('|').collect();
             if parts.len() >= 3 {
                 ContainerHealth {
@@ -180,14 +177,11 @@ fn is_healthy(health: &ContainerHealth) -> bool {
 
 /// Get gateway logs (last 50 lines) for diagnostics.
 fn get_gateway_logs(dir: &Path) -> String {
-    let output = Command::new("docker")
-        .current_dir(dir)
-        .args(["compose", "logs", "--tail", "50", "gateway"])
-        .output();
+    let output = crate::process::run_docker(&["compose", "logs", "--tail", "50", "gateway"], Some(dir));
     match output {
         Ok(out) => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            let stderr = String::from_utf8_lossy(&out.stderr);
+            let stdout = out.stdout;
+            let stderr = out.stderr;
             format!("{}\n{}", stdout, stderr)
         }
         Err(e) => format!("Failed to get logs: {}", e),
@@ -452,25 +446,23 @@ volumes:
 
 /// Ensure the openclaw-egress network exists (bridge).
 pub fn ensure_egress_network_exists() -> Result<(), String> {
-    let check = Command::new("docker")
-        .args(["network", "inspect", "openclaw-egress"])
-        .output();
+    let check = crate::process::run_docker(&["network", "inspect", "openclaw-egress"], None);
 
     // If it exists, we're good
     if let Ok(out) = check {
-        if out.status.success() {
+        if out.success() {
             return Ok(());
         }
     }
 
     // Create it
-    let create = Command::new("docker")
-        .args(["network", "create", "--driver", "bridge", "openclaw-egress"])
-        .output()
-        .map_err(|e| format!("Failed to create network: {}", e))?;
+    let create = crate::process::run_docker(
+        &["network", "create", "--driver", "bridge", "openclaw-egress"],
+        None,
+    ).map_err(|e| format!("Failed to create network: {}", e))?;
 
-    if !create.status.success() {
-        let stderr = String::from_utf8_lossy(&create.stderr);
+    if !create.success() {
+        let stderr = create.stderr;
         return Err(format!("Failed to create openclaw-egress network: {}", stderr));
     }
 
@@ -566,18 +558,16 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
         });
     }
 
-    let output = Command::new("docker")
-        .current_dir(&dir)
-        .args(["compose", "up", "-d"])
-        .output()
+    let output = crate::process::run_docker(&["compose", "up", "-d"], Some(&dir))
         .map_err(|e| format!("Failed to execute docker: {}", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let success = output.success();
+    let stdout = output.stdout;
+    let stderr = output.stderr;
     let combined_raw = format!("{}\n{}", stdout, stderr);
 
     // 3) If exit code != 0 → check if maybe running anyway (strict)
-    if !output.status.success() {
+    if !success {
         let (post_running, _inspect_diag) = check_gateway_strictly(&dir, false);
         if post_running {
             return Ok(GatewayStartResult {
@@ -683,16 +673,15 @@ pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
     // To avoid false negatives, we go straight to "docker pull" for ghcr.io images.
     let image_lower = image.to_lowercase();
     if image_lower.starts_with("ghcr.io/") || image_lower.contains("/ghcr.io/") {
-        let pull_output = Command::new("docker")
-            .args(["pull", &image])
-            .output()
+        let pull_output = crate::process::run_docker(&["pull", &image], None)
             .map_err(|e| format!("Failed to execute docker pull: {}", e))?;
 
-        let stdout = String::from_utf8_lossy(&pull_output.stdout);
-        let stderr = String::from_utf8_lossy(&pull_output.stderr);
+        let success = pull_output.success();
+        let stdout = pull_output.stdout;
+        let stderr = pull_output.stderr;
         let combined = format!("{}\n{}", stdout, stderr);
 
-        if pull_output.status.success() {
+        if success {
              return Ok(PullTestResult {
                 accessible: true,
                 image,
@@ -711,16 +700,15 @@ pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
     }
 
     // 2. Standard Logic: Manifest first (faster)
-    let output = Command::new("docker")
-        .args(["manifest", "inspect", &image])
-        .output()
+    let output = crate::process::run_docker(&["manifest", "inspect", &image], None)
         .map_err(|e| format!("Failed to execute docker: {}", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let success = output.success();
+    let stdout = output.stdout;
+    let stderr = output.stderr;
     let combined = format!("{}\n{}", stdout, stderr);
 
-    if output.status.success() {
+    if success {
         return Ok(PullTestResult {
             accessible: true,
             image,
@@ -733,16 +721,15 @@ pub async fn test_pull_access(image: String) -> Result<PullTestResult, String> {
     // Combine stdout/stderr because Windows Docker sometimes puts error text in stdout
     if should_try_pull_fallback(&combined) {
         // Fallback: try actual docker pull
-        let pull_output = Command::new("docker")
-            .args(["pull", &image])
-            .output()
+        let pull_output = crate::process::run_docker(&["pull", &image], None)
             .map_err(|e| format!("Failed to execute docker pull: {}", e))?;
 
-        let pull_stdout = String::from_utf8_lossy(&pull_output.stdout);
-        let pull_stderr = String::from_utf8_lossy(&pull_output.stderr);
+        let success = pull_output.success();
+        let pull_stdout = pull_output.stdout;
+        let pull_stderr = pull_output.stderr;
         let pull_combined = format!("{}\n{}", pull_stdout, pull_stderr);
 
-        if pull_output.status.success() {
+        if success {
              return Ok(PullTestResult {
                 accessible: true,
                 image: image.clone(),
@@ -776,17 +763,16 @@ fn should_try_pull_fallback(output: &str) -> bool {
 
 #[tauri::command]
 pub async fn docker_smoke_test() -> Result<PullTestResult, String> {
-    let output = Command::new("docker")
-        .args(["run", "--rm", "hello-world"])
-        .output()
+    let output = crate::process::run_docker(&["run", "--rm", "hello-world"], None)
         .map_err(|e| format!("Failed to execute docker: {}", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let success = output.success();
+    let stdout = output.stdout;
+    let stderr = output.stderr;
     let combined = format!("{}\n{}", stdout, stderr);
 
     Ok(PullTestResult {
-        accessible: output.status.success(),
+        accessible: success,
         image: "hello-world".into(),
         diagnostics: sanitize_output(&combined),
         warning: None,
@@ -815,19 +801,17 @@ pub async fn build_local_image(context_path: String) -> Result<BuildResult, Stri
     }
 
     let tag = "openclaw-gateway:dev";
-    let output = Command::new("docker")
-        .args(["build", "-t", tag, "."])
-        .current_dir(context)
-        .output()
+    let output = crate::process::run_docker(&["build", "-t", tag, "."], Some(context))
         .map_err(|e| format!("Failed to run docker build: {}", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let success = output.success();
+    let stdout = output.stdout;
+    let stderr = output.stderr;
     let logs = format!("{}\n{}", stdout, stderr);
 
     Ok(BuildResult {
-        success: output.status.success(),
-        image_tag: if output.status.success() { tag.to_string() } else { String::new() },
+        success,
+        image_tag: if success { tag.to_string() } else { String::new() },
         logs: sanitize_output(&logs),
     })
 }
@@ -846,21 +830,21 @@ pub async fn open_app_data_folder(app: AppHandle) -> Result<(), String> {
     let dir = get_app_data_dir(&app)?;
     #[cfg(target_os = "windows")]
     {
-        Command::new("explorer")
+        std::process::Command::new("explorer")
             .arg(dir.to_string_lossy().to_string())
             .spawn()
             .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
+        std::process::Command::new("open")
             .arg(dir.to_string_lossy().to_string())
             .spawn()
             .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open")
+        std::process::Command::new("xdg-open")
             .arg(dir.to_string_lossy().to_string())
             .spawn()
             .map_err(|e| e.to_string())?;
@@ -871,14 +855,11 @@ pub async fn open_app_data_folder(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn stop_gateway(app: AppHandle) -> Result<String, String> {
     let dir = get_app_data_dir(&app)?;
-    let output = Command::new("docker")
-        .current_dir(&dir)
-        .args(["compose", "down"])
-        .output()
+    let output = crate::process::run_docker(&["compose", "down"], Some(&dir))
         .map_err(|e| e.to_string())?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.success() {
+        let stderr = output.stderr;
         return Err(format!("Docker stop failed: {}", sanitize_output(&stderr)));
     }
     Ok("Gateway stopped".to_string())
@@ -887,14 +868,11 @@ pub async fn stop_gateway(app: AppHandle) -> Result<String, String> {
 #[tauri::command]
 pub async fn gateway_logs(app: AppHandle) -> Result<String, String> {
     let dir = get_app_data_dir(&app)?;
-    let output = Command::new("docker")
-        .current_dir(&dir)
-        .args(["compose", "logs", "--tail", "100"])
-        .output()
+    let output = crate::process::run_docker(&["compose", "logs", "--tail", "100"], Some(&dir))
         .map_err(|e| e.to_string())?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = output.stdout;
+    let stderr = output.stderr;
     let combined = format!("{}\n{}", stdout, stderr);
     Ok(sanitize_output(&combined))
 }

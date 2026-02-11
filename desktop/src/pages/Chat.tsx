@@ -1,15 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
-import { chatSend, testOllamaConnection, getAllowInternet, hasSecret, getGatewayStatus } from '../lib/tauri';
-import type { ChatMessage, GatewayStatusResult } from '../types';
+import { chatSend, testOllamaConnection, hasSecret } from '../lib/tauri';
+import type { ChatMessage } from '../types';
 import {
   Send, Bot, User, Loader2, AlertCircle, Wifi, WifiOff,
-  Key, Server, CheckCircle2, XCircle,
+  Key, Server, CheckCircle2, XCircle, RefreshCw
 } from 'lucide-react';
+import { useDesktop } from '../contexts/DesktopContext';
 
 const OPENAI_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
 const OLLAMA_MODELS = ['llama3', 'llama3.1', 'mistral', 'codellama', 'gemma2'];
 
 export default function Chat() {
+  const { isGatewayReady, allowInternet, refresh } = useDesktop();
+  
   const [provider, setProvider] = useState<'openai' | 'ollama'>('ollama');
   const [model, setModel] = useState('llama3');
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434');
@@ -18,46 +21,41 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Security checks
-  const [gatewayReady, setGatewayReady] = useState(false);
-  const [internetEnabled, setInternetEnabled] = useState(false);
+  // Additional local security checks
   const [hasApiKey, setHasApiKey] = useState(false);
   const [ollamaOk, setOllamaOk] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const [checking, setChecking] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const checkLocalStatus = async () => {
+    setChecking(true);
+    try {
+      // Refresh global context first
+      await refresh();
+      
+      const [apiKey, ollama] = await Promise.all([
+        hasSecret('OPENAI_API_KEY').catch(() => false),
+        testOllamaConnection().catch(() => false),
+      ]);
+      setHasApiKey(apiKey);
+      setOllamaOk(ollama);
+    } finally {
+      setChecking(false);
+    }
+  };
+
   useEffect(() => {
-    checkStatus();
+    checkLocalStatus();
   }, []);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
-  const checkStatus = async () => {
-    setChecking(true);
-    try {
-      const [gwStatus, internet, apiKey, ollama] = await Promise.all([
-        getGatewayStatus().catch(() => null as GatewayStatusResult | null),
-        getAllowInternet().catch(() => false),
-        hasSecret('OPENAI_API_KEY').catch(() => false),
-        testOllamaConnection().catch(() => false),
-      ]);
-      setGatewayReady(gwStatus?.containerStable === true && gwStatus.healthOk === true);
-      setInternetEnabled(internet);
-      setHasApiKey(apiKey);
-      setOllamaOk(ollama);
-    } catch {
-      // fail silently
-    } finally {
-      setChecking(false);
-    }
-  };
-
   const canChat =
-    gatewayReady &&
-    (provider === 'ollama' ? ollamaOk : internetEnabled && hasApiKey);
+    isGatewayReady &&
+    (provider === 'ollama' ? ollamaOk : allowInternet && hasApiKey);
 
   const handleSend = async () => {
     if (!input.trim() || loading || !canChat) return;
@@ -112,10 +110,10 @@ export default function Chat() {
       <div className="glass-panel p-3 mb-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div className="flex items-center gap-4">
-            <StatusCheck ok={gatewayReady} label="Gateway" />
+            <StatusCheck ok={isGatewayReady} label="Gateway" />
             {provider === 'openai' && (
               <>
-                <StatusCheck ok={internetEnabled} label="Internet" />
+                <StatusCheck ok={allowInternet} label="Internet" />
                 <StatusCheck ok={hasApiKey} label="API Key" />
               </>
             )}
@@ -123,8 +121,8 @@ export default function Chat() {
               <StatusCheck ok={ollamaOk} label="Ollama" />
             )}
           </div>
-          <button onClick={checkStatus} disabled={checking} className="glass-button text-xs flex items-center gap-1.5">
-            {checking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Server className="w-3 h-3" />}
+          <button onClick={checkLocalStatus} disabled={checking} className="glass-button text-xs flex items-center gap-1.5">
+            {checking ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
             Refresh
           </button>
         </div>
@@ -146,7 +144,7 @@ export default function Chat() {
                 onClick={() => { setProvider('openai'); setModel('gpt-4o-mini'); }}
                 className={`glass-button text-sm flex items-center gap-1.5 ${provider === 'openai' ? 'ring-1 ring-cyan-400/40 bg-cyan-500/10' : ''}`}
               >
-                {internetEnabled ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
+                {allowInternet ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
                 OpenAI (Cloud)
               </button>
             </div>
@@ -178,14 +176,14 @@ export default function Chat() {
           </div>
         )}
 
-        {provider === 'openai' && !internetEnabled && (
+        {provider === 'openai' && !allowInternet && (
           <div className="flex items-start gap-2 text-xs text-amber-300/70 bg-amber-500/5 p-2.5 rounded-lg border border-amber-500/10">
             <WifiOff className="w-3.5 h-3.5 mt-0.5 shrink-0" />
             <span>Internet is disabled. Go to <strong>Settings</strong> and enable <strong>Allow Internet</strong> to use OpenAI.</span>
           </div>
         )}
 
-        {provider === 'openai' && internetEnabled && !hasApiKey && (
+        {provider === 'openai' && allowInternet && !hasApiKey && (
           <div className="flex items-start gap-2 text-xs text-amber-300/70 bg-amber-500/5 p-2.5 rounded-lg border border-amber-500/10">
             <Key className="w-3.5 h-3.5 mt-0.5 shrink-0" />
             <span>No API key found. Add your OpenAI API key in <strong>Settings → Secrets</strong>.</span>

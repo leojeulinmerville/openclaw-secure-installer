@@ -1,0 +1,159 @@
+   Compiling my_openclaw v0.1.6 (D:\MVP\openclaw-secure-installer\desktop\src-tauri)
+error[E0433]: failed to resolve: use of undeclared type `Command`
+   --> src\gateway.rs:799:18
+    |
+799 |     let output = Command::new("docker")
+    |                  ^^^^^^^ use of undeclared type `Command`
+    |
+help: consider importing one of these structs
+    |
+  1 + use std::process::Command;
+    |
+  1 + use tauri_plugin_shell::process::Command;
+    |
+
+error[E0433]: failed to resolve: use of undeclared type `Command`
+   --> src\gateway.rs:830:9
+    |
+830 |         Command::new("explorer")
+    |         ^^^^^^^ use of undeclared type `Command`
+    |
+help: consider importing one of these structs
+    |
+  1 + use std::process::Command;
+    |
+  1 + use tauri_plugin_shell::process::Command;
+    |
+
+error[E0433]: failed to resolve: use of undeclared type `Command`
+   --> src\gateway.rs:855:18
+    |
+855 |     let output = Command::new("docker")
+    |                  ^^^^^^^ use of undeclared type `Command`
+    |
+help: consider importing one of these structs
+    |
+  1 + use std::process::Command;
+    |
+  1 + use tauri_plugin_shell::process::Command;
+    |
+
+error[E0433]: failed to resolve: use of undeclared type `Command`
+   --> src\gateway.rs:871:18
+    |
+871 |     let output = Command::new("docker")
+    |                  ^^^^^^^ use of undeclared type `Command`
+    |
+help: consider importing one of these structs
+    |
+  1 + use std::process::Command;
+    |
+  1 + use tauri_plugin_shell::process::Command;
+    |
+
+warning: unused import: `std::io::ErrorKind`
+ --> src\docker_check.rs:2:5
+  |
+2 | use std::io::ErrorKind;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::process::Command`
+ --> src\docker_check.rs:4:5
+  |
+4 | use std::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+error[E0382]: borrow of partially moved value: `output`
+   --> src\gateway.rs:569:9
+    |
+565 |     let stderr = output.stderr;
+    |                  ------------- value partially moved here
+...
+569 |     if !output.success() {
+    |         ^^^^^^ value borrowed here after partial move
+    |
+    = note: partial move occurs because `output.stderr` has type `std::string::String`, which does not implement the `Copy` trait
+
+error[E0382]: borrow of partially moved value: `pull_output`
+   --> src\gateway.rs:682:12
+    |
+679 |         let stderr = pull_output.stderr;
+    |                      ------------------ value partially moved here
+...
+682 |         if pull_output.success() {
+    |            ^^^^^^^^^^^ value borrowed here after partial move
+    |
+    = note: partial move occurs because `pull_output.stderr` has type `std::string::String`, which does not implement the `Copy` trait
+
+error[E0382]: borrow of partially moved value: `output`
+   --> src\gateway.rs:708:8
+    |
+705 |     let stderr = output.stderr;
+    |                  ------------- value partially moved here
+...
+708 |     if output.success() {
+    |        ^^^^^^ value borrowed here after partial move
+    |
+    = note: partial move occurs because `output.stderr` has type `std::string::String`, which does not implement the `Copy` trait
+
+error[E0382]: borrow of partially moved value: `pull_output`
+   --> src\gateway.rs:728:12
+    |
+725 |         let pull_stderr = pull_output.stderr;
+    |                           ------------------ value partially moved here
+...
+728 |         if pull_output.success() {
+    |            ^^^^^^^^^^^ value borrowed here after partial move
+    |
+    = note: partial move occurs because `pull_output.stderr` has type `std::string::String`, which does not implement the `Copy` trait
+
+error[E0382]: borrow of partially moved value: `output`
+   --> src\gateway.rs:770:21
+    |
+766 |     let stderr = output.stderr;
+    |                  ------------- value partially moved here
+...
+770 |         accessible: output.success(),
+    |                     ^^^^^^ value borrowed here after partial move
+    |
+    = note: partial move occurs because `output.stderr` has type `std::string::String`, which does not implement the `Copy` trait
+
+error[E0282]: type annotations needed
+   --> src\gateway.rs:833:23
+    |
+833 |             .map_err(|e| e.to_string())?;
+    |                       ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+833 |             .map_err(|e: /* Type */| e.to_string())?;
+    |                        ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src\gateway.rs:859:19
+    |
+859 |         .map_err(|e| e.to_string())?;
+    |                   ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+859 |         .map_err(|e: /* Type */| e.to_string())?;
+    |                    ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src\gateway.rs:875:19
+    |
+875 |         .map_err(|e| e.to_string())?;
+    |                   ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+875 |         .map_err(|e: /* Type */| e.to_string())?;
+    |                    ++++++++++++
+
+Some errors have detailed explanations: E0282, E0382, E0433.
+For more information about an error, try `rustc --explain E0282`.
+warning: `my_openclaw` (bin "my_openclaw") generated 2 warnings
+error: could not compile `my_openclaw` (bin "my_openclaw") due to 12 previous errors; 2 warnings emitted

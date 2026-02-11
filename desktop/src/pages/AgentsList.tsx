@@ -3,26 +3,36 @@ import { listAgents, agentInspectHealth } from '../lib/tauri';
 import type { AgentListItem, Page } from '../types';
 import { StatusPill } from '../components/StatusPill';
 import { relativeTime } from '../lib/format';
+import { useDesktop } from '../contexts/DesktopContext';
+import { AlertTriangle } from 'lucide-react';
 
 interface Props {
   onNavigate: (page: Page, agentId?: string) => void;
 }
 
 export default function AgentsList({ onNavigate }: Props) {
+  const { isGatewayReady, startGateway } = useDesktop();
   const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Poll agents list only when gateway is ready
   useEffect(() => {
+    if (!isGatewayReady) {
+      setLoading(false);
+      return;
+    }
+    
     refresh();
-    const interval = setInterval(refresh, 10000);
+    const interval = setInterval(refresh, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [isGatewayReady]);
 
   async function refresh() {
     try {
       const list = await listAgents();
-      // Refresh health for running agents
+      // Refresh health for running agents (optimization: parallelize or trust list if rich enough)
+      // For now, keep the detailed health check pattern but maybe debounce it later
       const updated = await Promise.all(
         list.map(async (a) => {
           if (a.status === 'running') {
@@ -42,6 +52,30 @@ export default function AgentsList({ onNavigate }: Props) {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Gating view
+  if (!isGatewayReady) {
+    return (
+      <div className="page-container custom-scroll flex items-center justify-center p-8">
+        <div className="max-w-md text-center">
+          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <AlertTriangle className="w-8 h-8 text-red-500" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-3">Gateway Required</h2>
+          <p className="text-white/60 mb-8">
+            The OpenClaw Gateway must be running to manage agents. 
+            Start the gateway to view and control your agents.
+          </p>
+          <button 
+            onClick={() => startGateway()}
+            className="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-lg font-bold transition-all"
+          >
+            Start Gateway
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const filtered = agents.filter((a) =>

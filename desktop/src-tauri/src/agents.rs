@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::process::Command;
+// use std::process::Command;
 use tauri::AppHandle;
 
 use crate::gateway::{sanitize_output, ensure_gateway_ready};
@@ -93,27 +93,26 @@ fn container_name(id: &str) -> String {
 
 /// Check if a container exists (any state).
 fn container_exists(name: &str) -> bool {
-    Command::new("docker")
-        .args(["inspect", "--format", "{{.Id}}", name])
-        .output()
-        .map(|o| o.status.success())
+    crate::process::run_docker(&["inspect", "--format", "{{.Id}}", name], None)
+        .map(|o| o.success())
         .unwrap_or(false)
 }
 
 /// Inspect container state for an agent.
 fn inspect_agent(name: &str) -> AgentInspectResult {
-    let output = Command::new("docker")
-        .args([
+    let output = crate::process::run_docker(
+        &[
             "inspect",
             "--format",
             "{{.State.Status}}|{{.State.Restarting}}|{{.State.ExitCode}}",
             name,
-        ])
-        .output();
+        ],
+        None,
+    );
 
     match output {
-        Ok(out) if out.status.success() => {
-            let raw = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        Ok(out) if out.success() => {
+            let raw = out.stdout.trim().to_string();
             let parts: Vec<&str> = raw.split('|').collect();
             if parts.len() >= 3 {
                 let status = parts[0].to_lowercase();
@@ -153,26 +152,25 @@ fn inspect_agent(name: &str) -> AgentInspectResult {
 /// Ensure the managed Docker network exists.
 fn ensure_network() -> Result<(), String> {
     // Check if network exists
-    let check = Command::new("docker")
-        .args(["network", "inspect", MANAGED_NETWORK])
-        .output()
+    let check = crate::process::run_docker(&["network", "inspect", MANAGED_NETWORK], None)
         .map_err(|e| format!("Failed to check network: {}", e))?;
 
-    if !check.status.success() {
+    if !check.success() {
         // Create internal network
-        let create = Command::new("docker")
-            .args([
+        let create = crate::process::run_docker(
+            &[
                 "network", "create",
                 "--driver", "bridge",
                 "--internal",
                 "--label", "ai.openclaw.managed=true",
                 MANAGED_NETWORK,
-            ])
-            .output()
-            .map_err(|e| format!("Failed to create network: {}", e))?;
+            ],
+            None,
+        )
+        .map_err(|e| format!("Failed to create network: {}", e))?;
 
-        if !create.status.success() {
-            let stderr = String::from_utf8_lossy(&create.stderr);
+        if !create.success() {
+            let stderr = create.stderr;
             return Err(format!("Network creation failed: {}", stderr));
         }
     }
@@ -342,13 +340,12 @@ pub fn start_agent(app: AppHandle, agent_id: String) -> Result<AgentInspectResul
         create_args.push(agent.runtime_image.clone());
         create_args.extend(["node".into(), "openclaw.mjs".into(), "gateway".into(), "--allow-unconfigured".into()]);
 
-        let create = Command::new("docker")
-            .args(&create_args)
-            .output()
+        let args_refs: Vec<&str> = create_args.iter().map(|s| s.as_str()).collect();
+        let create = crate::process::run_docker(&args_refs, None)
             .map_err(|e| format!("docker create failed: {}", e))?;
 
-        if !create.status.success() {
-            let stderr = sanitize_output(&String::from_utf8_lossy(&create.stderr));
+        if !create.success() {
+            let stderr = sanitize_output(&create.stderr);
             update_agent_state(&app, &agent_id, |a| {
                 a.status = "error".into();
                 a.last_error = stderr.clone();
@@ -358,13 +355,11 @@ pub fn start_agent(app: AppHandle, agent_id: String) -> Result<AgentInspectResul
     }
 
     // Start the container
-    let start = Command::new("docker")
-        .args(["start", &agent.container_name])
-        .output()
+    let start = crate::process::run_docker(&["start", &agent.container_name], None)
         .map_err(|e| format!("docker start failed: {}", e))?;
 
-    if !start.status.success() {
-        let stderr = sanitize_output(&String::from_utf8_lossy(&start.stderr));
+    if !start.success() {
+        let stderr = sanitize_output(&start.stderr);
         update_agent_state(&app, &agent_id, |a| {
             a.status = "error".into();
             a.last_error = stderr.clone();
@@ -412,13 +407,11 @@ pub fn stop_agent(app: AppHandle, agent_id: String) -> Result<(), String> {
     let agent = get_agent(&app, &agent_id)?;
 
     if container_exists(&agent.container_name) {
-        let stop = Command::new("docker")
-            .args(["stop", "-t", "10", &agent.container_name])
-            .output()
+        let stop = crate::process::run_docker(&["stop", "-t", "10", &agent.container_name], None)
             .map_err(|e| format!("docker stop failed: {}", e))?;
 
-        if !stop.status.success() {
-            let stderr = sanitize_output(&String::from_utf8_lossy(&stop.stderr));
+        if !stop.success() {
+            let stderr = sanitize_output(&stop.stderr);
             return Err(format!("Stop failed: {}", stderr));
         }
     }
@@ -439,13 +432,9 @@ pub fn restart_agent(app: AppHandle, agent_id: String) -> Result<AgentInspectRes
 
     // Stop if running
     if container_exists(&agent.container_name) {
-        let _ = Command::new("docker")
-            .args(["stop", "-t", "5", &agent.container_name])
-            .output();
+        let _ = crate::process::run_docker(&["stop", "-t", "5", &agent.container_name], None);
         // Remove old container so start_agent recreates with fresh env
-        let _ = Command::new("docker")
-            .args(["rm", "-f", &agent.container_name])
-            .output();
+        let _ = crate::process::run_docker(&["rm", "-f", &agent.container_name], None);
     }
 
     start_agent(app, agent_id)
@@ -459,9 +448,7 @@ pub fn remove_agent(app: AppHandle, agent_id: String) -> Result<(), String> {
 
     // Force-remove container if it exists
     if container_exists(&agent.container_name) {
-        let _ = Command::new("docker")
-            .args(["rm", "-f", &agent.container_name])
-            .output();
+        let _ = crate::process::run_docker(&["rm", "-f", &agent.container_name], None);
     }
 
     // Remove from state
@@ -479,13 +466,11 @@ pub fn agent_logs(app: AppHandle, agent_id: String, lines: Option<u32>) -> Resul
     let agent = get_agent(&app, &agent_id)?;
     let tail = lines.unwrap_or(100).to_string();
 
-    let output = Command::new("docker")
-        .args(["logs", "--tail", &tail, &agent.container_name])
-        .output()
+    let output = crate::process::run_docker(&["logs", "--tail", &tail, &agent.container_name], None)
         .map_err(|e| format!("docker logs failed: {}", e))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = output.stdout;
+    let stderr = output.stderr;
     // Docker may output to stderr for logs
     let combined = if stdout.is_empty() {
         stderr.to_string()
@@ -502,16 +487,17 @@ pub fn agent_stats(app: AppHandle, agent_id: String) -> Result<AgentStatsResult,
     ensure_gateway_ready(&app)?;
     let agent = get_agent(&app, &agent_id)?;
 
-    let output = Command::new("docker")
-        .args([
+    let output = crate::process::run_docker(
+        &[
             "stats", "--no-stream",
             "--format", "{{.CPUPerc}}|{{.MemUsage}}|{{.NetIO}}",
             &agent.container_name,
-        ])
-        .output()
-        .map_err(|e| format!("docker stats failed: {}", e))?;
+        ],
+        None,
+    )
+    .map_err(|e| format!("docker stats failed: {}", e))?;
 
-    if !output.status.success() {
+    if !output.success() {
         return Ok(AgentStatsResult {
             agent_id: agent_id.clone(),
             cpu_percent: 0.0,
@@ -522,7 +508,7 @@ pub fn agent_stats(app: AppHandle, agent_id: String) -> Result<AgentStatsResult,
         });
     }
 
-    let raw = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let raw = output.stdout.trim().to_string();
     let parts: Vec<&str> = raw.split('|').collect();
 
     let cpu = if parts.len() > 0 {
@@ -575,13 +561,14 @@ pub fn agent_inspect_health(
 /// Connect or disconnect agent from managed network.
 fn connect_network(container_name: &str) -> Result<(), String> {
     ensure_network()?;
-    let output = Command::new("docker")
-        .args(["network", "connect", MANAGED_NETWORK, container_name])
-        .output()
-        .map_err(|e| format!("Network connect failed: {}", e))?;
+    let output = crate::process::run_docker(
+        &["network", "connect", MANAGED_NETWORK, container_name],
+        None,
+    )
+    .map_err(|e| format!("Network connect failed: {}", e))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.success() {
+        let stderr = output.stderr;
         // Ignore "already connected" errors
         if !stderr.contains("already exists") {
             return Err(format!("Network connect failed: {}", stderr));
@@ -591,13 +578,14 @@ fn connect_network(container_name: &str) -> Result<(), String> {
 }
 
 fn disconnect_network(container_name: &str) -> Result<(), String> {
-    let output = Command::new("docker")
-        .args(["network", "disconnect", "--force", MANAGED_NETWORK, container_name])
-        .output()
-        .map_err(|e| format!("Network disconnect failed: {}", e))?;
+    let output = crate::process::run_docker(
+        &["network", "disconnect", "--force", MANAGED_NETWORK, container_name],
+        None,
+    )
+    .map_err(|e| format!("Network disconnect failed: {}", e))?;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    if !output.success() {
+        let stderr = output.stderr;
         // Ignore "not connected" errors
         if !stderr.contains("is not connected") {
             return Err(format!("Network disconnect failed: {}", stderr));
@@ -651,9 +639,7 @@ pub fn quarantine_agent(app: AppHandle, agent_id: String) -> Result<(), String> 
     if container_exists(&agent.container_name) {
         let _ = disconnect_network(&agent.container_name);
         // Stop the container
-        let _ = Command::new("docker")
-            .args(["stop", "-t", "5", &agent.container_name])
-            .output();
+        let _ = crate::process::run_docker(&["stop", "-t", "5", &agent.container_name], None);
     }
 
     update_agent_state(&app, &agent_id, |a| {
@@ -719,9 +705,7 @@ pub fn check_agent_crashloop(
 
         // Disconnect network + stop
         let _ = disconnect_network(&agent.container_name);
-        let _ = Command::new("docker")
-            .args(["stop", "-t", "5", &agent.container_name])
-            .output();
+        let _ = crate::process::run_docker(&["stop", "-t", "5", &agent.container_name], None);
 
         return Ok(true);
     }

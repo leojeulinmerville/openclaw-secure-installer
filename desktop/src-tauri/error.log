@@ -1,0 +1,414 @@
+   Compiling my_openclaw v0.1.6 (D:\MVP\openclaw-secure-installer\desktop\src-tauri)
+warning: hard linking files in the incremental compilation cache failed. copying files instead. consider moving the cache directory to a file system which supports hard linking in session dir `\\?\D:\MVP\openclaw-secure-installer\desktop\src-tauri\target\debug\incremental\my_openclaw-3k8xta6jjs1jc\s-hforyvx8ej-1ijhkx0-working`
+
+error[E0433]: failed to resolve: unresolved import
+  --> src\docker_check.rs:46:23
+   |
+46 |   let result = crate::process::run_command_capture(exe, args, None);
+   |                       ^^^^^^^
+   |                       |
+   |                       unresolved import
+   |                       help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\state_manager.rs:220:32
+    |
+220 |                 let _ = crate::process::run_docker(
+    |                                ^^^^^^^
+    |                                |
+    |                                unresolved import
+    |                                help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:126:25
+    |
+126 |     let output = crate::process::run_docker(&["compose", "ps", "-q", "gateway"], Some(dir)).ok()?;
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:134:25
+    |
+134 |     let output = crate::process::run_docker(
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:180:25
+    |
+180 |     let output = crate::process::run_docker(&["compose", "logs", "--tail", "50", "gateway"], Some(dir));
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:449:24
+    |
+449 |     let check = crate::process::run_docker(&["network", "inspect", "openclaw-egress"], None);
+    |                        ^^^^^^^
+    |                        |
+    |                        unresolved import
+    |                        help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:459:25
+    |
+459 |     let create = crate::process::run_docker(
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:561:25
+    |
+561 |     let output = crate::process::run_docker(&["compose", "up", "-d"], Some(&dir))
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:676:34
+    |
+676 |         let pull_output = crate::process::run_docker(&["pull", &image], None)
+    |                                  ^^^^^^^
+    |                                  |
+    |                                  unresolved import
+    |                                  help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:703:25
+    |
+703 |     let output = crate::process::run_docker(&["manifest", "inspect", &image], None)
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:724:34
+    |
+724 |         let pull_output = crate::process::run_docker(&["pull", &image], None)
+    |                                  ^^^^^^^
+    |                                  |
+    |                                  unresolved import
+    |                                  help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:766:25
+    |
+766 |     let output = crate::process::run_docker(&["run", "--rm", "hello-world"], None)
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:804:25
+    |
+804 |     let output = crate::process::run_docker(&["build", "-t", tag, "."], Some(context))
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:858:25
+    |
+858 |     let output = crate::process::run_docker(&["compose", "down"], Some(&dir))
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\gateway.rs:871:25
+    |
+871 |     let output = crate::process::run_docker(&["compose", "logs", "--tail", "100"], Some(&dir))
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+  --> src\agents.rs:96:12
+   |
+96 |     crate::process::run_docker(&["inspect", "--format", "{{.Id}}", name], None)
+   |            ^^^^^^^
+   |            |
+   |            unresolved import
+   |            help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:103:25
+    |
+103 |     let output = crate::process::run_docker(
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:155:24
+    |
+155 |     let check = crate::process::run_docker(&["network", "inspect", MANAGED_NETWORK], None)
+    |                        ^^^^^^^
+    |                        |
+    |                        unresolved import
+    |                        help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:160:29
+    |
+160 |         let create = crate::process::run_docker(
+    |                             ^^^^^^^
+    |                             |
+    |                             unresolved import
+    |                             help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:344:29
+    |
+344 |         let create = crate::process::run_docker(&args_refs, None)
+    |                             ^^^^^^^
+    |                             |
+    |                             unresolved import
+    |                             help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:358:24
+    |
+358 |     let start = crate::process::run_docker(&["start", &agent.container_name], None)
+    |                        ^^^^^^^
+    |                        |
+    |                        unresolved import
+    |                        help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:410:27
+    |
+410 |         let stop = crate::process::run_docker(&["stop", "-t", "10", &agent.container_name], None)
+    |                           ^^^^^^^
+    |                           |
+    |                           unresolved import
+    |                           help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:435:24
+    |
+435 |         let _ = crate::process::run_docker(&["stop", "-t", "5", &agent.container_name], None);
+    |                        ^^^^^^^
+    |                        |
+    |                        unresolved import
+    |                        help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:437:24
+    |
+437 |         let _ = crate::process::run_docker(&["rm", "-f", &agent.container_name], None);
+    |                        ^^^^^^^
+    |                        |
+    |                        unresolved import
+    |                        help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:451:24
+    |
+451 |         let _ = crate::process::run_docker(&["rm", "-f", &agent.container_name], None);
+    |                        ^^^^^^^
+    |                        |
+    |                        unresolved import
+    |                        help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:469:25
+    |
+469 |     let output = crate::process::run_docker(&["logs", "--tail", &tail, &agent.container_name], None)
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:490:25
+    |
+490 |     let output = crate::process::run_docker(
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:564:25
+    |
+564 |     let output = crate::process::run_docker(
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:581:25
+    |
+581 |     let output = crate::process::run_docker(
+    |                         ^^^^^^^
+    |                         |
+    |                         unresolved import
+    |                         help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:642:24
+    |
+642 |         let _ = crate::process::run_docker(&["stop", "-t", "5", &agent.container_name], None);
+    |                        ^^^^^^^
+    |                        |
+    |                        unresolved import
+    |                        help: a similar path exists: `std::process`
+
+error[E0433]: failed to resolve: unresolved import
+   --> src\agents.rs:708:24
+    |
+708 |         let _ = crate::process::run_docker(&["stop", "-t", "5", &agent.container_name], None);
+    |                        ^^^^^^^
+    |                        |
+    |                        unresolved import
+    |                        help: a similar path exists: `std::process`
+
+warning: unused import: `std::io::ErrorKind`
+ --> src\docker_check.rs:2:5
+  |
+2 | use std::io::ErrorKind;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::process::Command`
+ --> src\docker_check.rs:4:5
+  |
+4 | use std::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Path`
+ --> src\runs.rs:3:17
+  |
+3 | use std::path::{Path, PathBuf};
+  |                 ^^^^
+
+warning: unused import: `State`
+ --> src\runs.rs:4:33
+  |
+4 | use tauri::{AppHandle, Manager, State};
+  |                                 ^^^^^
+
+warning: unused import: `std::fs`
+ --> src\patch.rs:1:5
+  |
+1 | use std::fs;
+  |     ^^^^^^^
+
+warning: unused import: `PathBuf`
+ --> src\patch.rs:2:23
+  |
+2 | use std::path::{Path, PathBuf};
+  |                       ^^^^^^^
+
+warning: unused import: `std::io::Write`
+ --> src\patch.rs:3:5
+  |
+3 | use std::io::Write;
+  |     ^^^^^^^^^^^^^^
+
+error[E0282]: type annotations needed
+   --> src\gateway.rs:859:19
+    |
+859 |         .map_err(|e| e.to_string())?;
+    |                   ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+859 |         .map_err(|e: /* Type */| e.to_string())?;
+    |                    ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src\gateway.rs:872:19
+    |
+872 |         .map_err(|e| e.to_string())?;
+    |                   ^  - type must be known at this point
+    |
+help: consider giving this closure parameter an explicit type
+    |
+872 |         .map_err(|e: /* Type */| e.to_string())?;
+    |                    ++++++++++++
+
+error[E0282]: type annotations needed
+  --> src\docker_check.rs:59:19
+   |
+59 |       error: Some(err_msg.clone()),
+   |                   ^^^^^^^ cannot infer type
+
+error[E0282]: type annotations needed
+   --> src\gateway.rs:453:12
+    |
+453 |         if out.success() {
+    |            ^^^ cannot infer type
+
+error[E0282]: type annotations needed
+  --> src\agents.rs:97:15
+   |
+97 |         .map(|o| o.success())
+   |               ^  - type must be known at this point
+   |
+help: consider giving this closure parameter an explicit type
+   |
+97 |         .map(|o: /* Type */| o.success())
+   |                ++++++++++++
+
+error[E0282]: type annotations needed
+   --> src\agents.rs:114:20
+    |
+114 |         Ok(out) if out.success() => {
+    |                    ^^^ cannot infer type
+
+error[E0277]: `?` couldn't convert the error to `std::io::Error`
+   --> src\runs.rs:201:45
+    |
+200 | fn get_runs_dir(app: &AppHandle) -> Result<PathBuf, std::io::Error> {
+    |                                     ------------------------------- expected `std::io::Error` because of this
+201 |     let app_data = app.path().app_data_dir()?;
+    |                               --------------^ the trait `From<tauri::Error>` is not implemented for `std::io::Error`
+    |                               |
+    |                               this can't be annotated with `?` because it has type `Result<_, tauri::Error>`
+    |
+    = note: the question mark operation (`?`) implicitly performs a conversion on the error value using the `From` trait
+    = help: the following other types implement trait `From<T>`:
+              `std::io::Error` implements `From<ErrorKind>`
+              `std::io::Error` implements `From<IntoInnerError<W>>`
+              `std::io::Error` implements `From<NulError>`
+              `std::io::Error` implements `From<TryReserveError>`
+              `std::io::Error` implements `From<bytes::TryGetError>`
+              `std::io::Error` implements `From<getrandom::error::Error>`
+              `std::io::Error` implements `From<serde_json::Error>`
+              `std::io::Error` implements `From<std::fs::TryLockError>`
+            and 5 others
+
+error[E0282]: type annotations needed for `Vec<_>`
+  --> src\patch.rs:32:9
+   |
+32 |     let mut modified_files = Vec::new();
+   |         ^^^^^^^^^^^^^^^^^^   ---------- type must be known at this point
+   |
+help: consider giving `modified_files` an explicit type, where the type for type parameter `T` is specified
+   |
+32 |     let mut modified_files: Vec<T> = Vec::new();
+   |                           ++++++++
+
+Some errors have detailed explanations: E0277, E0282, E0433.
+For more information about an error, try `rustc --explain E0277`.
+warning: `my_openclaw` (bin "my_openclaw") generated 8 warnings
+error: could not compile `my_openclaw` (bin "my_openclaw") due to 39 previous errors; 8 warnings emitted

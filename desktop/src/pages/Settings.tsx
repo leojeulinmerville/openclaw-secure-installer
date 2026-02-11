@@ -1,36 +1,52 @@
 import { useState, useEffect } from 'react';
-import { getState, configureInstallation, openAppDataFolder, getAllowInternet, setAllowInternet } from '../lib/tauri';
-import type { InstallerState } from '../types';
+import { configureInstallation, openAppDataFolder } from '../lib/tauri';
 import {
-  FolderOpen, Save, Network, HardDrive, Loader2, Info, Wifi, WifiOff,
+  FolderOpen, Network, HardDrive, Loader2, Info, Wifi, WifiOff, RefreshCw
 } from 'lucide-react';
+import { useDesktop } from '../contexts/DesktopContext';
 
 export function Settings() {
-  const [state, setState] = useState<InstallerState | null>(null);
+  const { config, startGateway, stopGateway, setInternet, allowInternet, refresh } = useDesktop();
+  
+  // Local form state
   const [httpPort, setHttpPort] = useState(8080);
   const [httpsPort, setHttpsPort] = useState(8443);
   const [gatewayImage, setGatewayImage] = useState('');
+  
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [allowInternet, setAllowInternetLocal] = useState(false);
   const [internetLoading, setInternetLoading] = useState(false);
 
+  // Sync from context on load
   useEffect(() => {
-    getState().then(s => {
-      setState(s);
-      setHttpPort(s.http_port);
-      setHttpsPort(s.https_port);
-      setGatewayImage(s.gateway_image);
-    }).catch(console.error);
-    getAllowInternet().then(setAllowInternetLocal).catch(console.error);
-  }, []);
+    if (config) {
+      setHttpPort(config.http_port);
+      setHttpsPort(config.https_port);
+      setGatewayImage(config.gateway_image);
+    }
+  }, [config]);
 
-  const handleSave = async () => {
+  const hasChanges = config && (
+    httpPort !== config.http_port ||
+    httpsPort !== config.https_port ||
+    gatewayImage !== config.gateway_image
+  );
+
+  const handleSaveAndRestart = async () => {
     setSaving(true);
     setMessage(null);
     try {
+      // 1. Save config
       await configureInstallation(httpPort, httpsPort, gatewayImage || undefined);
-      setMessage('Settings saved. Restart gateway for port changes to take effect.');
+      setMessage('Configuration saved. Restarting gateway...');
+      
+      // 2. Restart gateway to apply changes
+      await stopGateway();
+      await startGateway();
+      
+      // 3. Refresh context
+      await refresh();
+      setMessage('Settings applied and gateway restarted successfully.');
     } catch (e) {
       setMessage(`Error: ${e}`);
     } finally {
@@ -41,11 +57,9 @@ export function Settings() {
   const handleInternetToggle = async () => {
     setInternetLoading(true);
     try {
-      const next = !allowInternet;
-      await setAllowInternet(next);
-      setAllowInternetLocal(next);
+      await setInternet(!allowInternet);
     } catch (e) {
-      setMessage(`Error: ${e}`);
+      setMessage(`Error toggling internet: ${e}`);
     } finally {
       setInternetLoading(false);
     }
@@ -102,7 +116,7 @@ export function Settings() {
       <section className="glass-panel p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${allowInternet ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${allowInternet ? 'bg-emerald-500/15' : 'bg-red-500/15'}`}>
               {allowInternet ? <Wifi className="w-4 h-4 text-emerald-400" /> : <WifiOff className="w-4 h-4 text-red-400" />}
             </div>
             <div>
@@ -113,9 +127,11 @@ export function Settings() {
           <button
             onClick={handleInternetToggle}
             disabled={internetLoading}
-            className={`toggle-switch ${allowInternet ? 'toggle-on' : 'toggle-off'}`}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${allowInternet ? 'bg-emerald-500' : 'bg-white/10'}`}
           >
-            <span className="toggle-knob" />
+            <span
+              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${allowInternet ? 'translate-x-6' : 'translate-x-1'}`}
+            />
           </button>
         </div>
         <div className="flex items-start gap-2 text-xs text-white/30 bg-white/[0.02] p-3 rounded-lg border border-white/[0.06]">
@@ -158,7 +174,7 @@ export function Settings() {
             </div>
             <div>
               <h3 className="text-sm font-bold text-white">Data Directory</h3>
-              <p className="text-xs text-white/30 font-mono">{state?.app_data_dir || '...'}</p>
+              <p className="text-xs text-white/30 font-mono">{config?.app_data_dir || '...'}</p>
             </div>
           </div>
           <button onClick={() => openAppDataFolder()} className="glass-button text-sm flex items-center gap-2">
@@ -168,21 +184,28 @@ export function Settings() {
       </section>
 
       {/* ── Install ID ──────────────────────────────────────────── */}
-      {state && (
+      {config && (
         <section className="glass-panel p-5 space-y-2">
-          <p className="text-xs text-white/20">Install ID: <span className="font-mono">{state.install_id}</span></p>
-          <p className="text-xs text-white/20">Status: <span className="font-mono">{state.status}</span></p>
+          <p className="text-xs text-white/20">Install ID: <span className="font-mono">{config.install_id}</span></p>
+          <p className="text-xs text-white/20">Status: <span className="font-mono">{config.status}</span></p>
         </section>
       )}
 
       {/* Save */}
-      <div className="flex items-center gap-3">
-        <button onClick={handleSave} disabled={saving} className="glass-button-accent flex items-center gap-2">
-          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          Save Settings
-        </button>
+      <div className="flex items-center gap-3 min-h-[40px]">
+        {hasChanges ? (
+          <button onClick={handleSaveAndRestart} disabled={saving} className="glass-button-accent flex items-center gap-2 bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border-emerald-500/30">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+            Apply & Restart Gateway
+          </button>
+        ) : (
+           <span className="text-xs text-white/20 italic">No unsaved changes</span>
+        )}
+        
         {message && (
-          <span className="text-xs text-white/40">{message}</span>
+          <span className={`text-xs ${message.includes('Error') ? 'text-red-400' : 'text-emerald-400'}`}>
+            {message}
+          </span>
         )}
       </div>
     </div>

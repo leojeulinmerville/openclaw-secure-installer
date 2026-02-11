@@ -1,45 +1,26 @@
-import { useState, useEffect, useCallback } from 'react';
-import { checkDocker, isGatewayRunning, checkGatewayHealth } from '../lib/tauri';
 import { formatCost } from '../lib/format';
-import type { CheckDockerResult, GatewayStartResult, HealthCheckResult, Alert } from '../types';
+import type { Alert } from '../types';
 import { StatusPill } from '../components/StatusPill';
 import {
   ShieldCheck, Server, Wifi,
   CheckCircle2, XCircle, AlertTriangle, TrendingUp, Clock
 } from 'lucide-react';
+import { useDesktop } from '../contexts/DesktopContext';
 
 // Mock data for alerts until M4 wires real data
 const MOCK_ALERTS: Alert[] = [];
 
 export function Overview() {
-  const [docker, setDocker] = useState<CheckDockerResult | null>(null);
-  const [gateway, setGateway] = useState<GatewayStartResult | null>(null);
-  const [health, setHealth] = useState<HealthCheckResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { 
+    docker, 
+    gatewayRunning, 
+    isLoading, 
+    refresh,
+    isGatewayReady,
+    isGatewayStable
+  } = useDesktop();
 
-  const refresh = useCallback(async () => {
-    try {
-      const [d, g] = await Promise.all([checkDocker(), isGatewayRunning()]);
-      setDocker(d);
-      setGateway(g);
-      if (g.gatewayActive) {
-        const h = await checkGatewayHealth();
-        setHealth(h);
-      }
-    } catch (e) {
-      console.error('Overview refresh failed:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const interval = setInterval(refresh, 15000);
-    return () => clearInterval(interval);
-  }, [refresh]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64 text-white/30">
         <Clock className="w-5 h-5 animate-spin mr-2" /> Loading system status...
@@ -48,15 +29,21 @@ export function Overview() {
   }
 
   const dockerOk = docker?.dockerCliFound && docker?.dockerDaemonReachable && docker?.composeV2Available;
-  const gatewayOk = gateway?.gatewayActive && health?.healthy;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white">Overview</h2>
-        <button onClick={refresh} className="glass-button text-sm flex items-center gap-2">
-          <TrendingUp className="w-4 h-4" /> Refresh
-        </button>
+        <div className="flex gap-2">
+          {!isGatewayReady && (
+            <button onClick={() => (window as any).navigate('setup')} className="glass-button-accent text-sm flex items-center gap-2 animate-pulse">
+              <ShieldCheck className="w-4 h-4" /> Setup Gateway
+            </button>
+          )}
+          <button onClick={refresh} className="glass-button text-sm flex items-center gap-2">
+            <TrendingUp className="w-4 h-4" /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* ── System Posture ──────────────────────────────────────── */}
@@ -79,12 +66,12 @@ export function Overview() {
               <CheckCircle2 className="w-5 h-5 text-cyan-400" />
               <div>
                 <p className="text-sm font-medium text-white">Gateway</p>
-                <p className="text-xs text-white/30">{gateway?.gatewayActive ? 'Running' : 'Stopped'}</p>
+                <p className="text-xs text-white/30">{gatewayRunning?.gatewayActive ? 'Running' : 'Stopped'}</p>
               </div>
             </div>
             <StatusPill
-              status={gatewayOk ? 'ok' : gateway?.gatewayActive ? 'warn' : 'bad'}
-              text={gatewayOk ? 'Healthy' : gateway?.gatewayActive ? 'Unhealthy' : 'Offline'}
+              status={isGatewayReady ? 'ok' : isGatewayStable ? 'warn' : 'bad'}
+              text={isGatewayReady ? 'Healthy' : isGatewayStable ? 'Unhealthy' : 'Offline'}
             />
           </div>
 

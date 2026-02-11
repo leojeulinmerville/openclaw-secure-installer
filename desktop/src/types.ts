@@ -186,6 +186,73 @@ export interface Alert {
 }
 
 // ── Navigation ──────────────────────────────────────────────────────
+// ── Runs & Approvals ────────────────────────────────────────────────
+
+export type RunStatus = 'queued' | 'running' | 'blocked' | 'done' | 'failed' | 'cancelled';
+
+export interface Run {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  agent_id: string;
+  provider: string;
+  model: string;
+  title: string;
+  user_goal: string;
+  status: RunStatus;
+  current_step: string | null;
+  error: string | null;
+  workspace_path: string;
+  repo_mode: 'none' | 'git';
+}
+
+export type EventType =
+  | 'run.created'
+  | 'run.started'
+  | 'run.blocked'
+  | 'run.completed'
+  | 'run.failed'
+  | 'run.cancelled'
+  | 'agent.message'
+  | 'tool.requested'
+  | 'tool.result'
+  | 'approval.requested'
+  | 'approval.approved'
+  | 'approval.rejected'
+  | 'artifact.created';
+
+export interface RunEvent {
+  id: string;
+  run_id: string;
+  timestamp: string;
+  type: EventType;
+  payload: unknown; // Flexible payload based on type
+}
+
+export type ApprovalKind = 'filesystem.write_patch' | 'network.enable_for_agent';
+
+export interface Approval {
+  id: string;
+  run_id: string;
+  kind: ApprovalKind;
+  summary: string;
+  risk_level: 'low' | 'medium' | 'high' | 'critical';
+  payload: unknown; // e.g., the patch content
+  created_at: string;
+  resolved_at: string | null;
+  decision: 'approved' | 'rejected' | null;
+}
+
+export interface Artifact {
+  id: string;
+  run_id: string;
+  type: 'summary' | 'patch' | 'file' | 'verification';
+  name: string;
+  path: string; // Relative to run artifacts dir
+  created_at: string;
+}
+
+// ── Navigation (Updated) ────────────────────────────────────────────
 export type Page =
   | 'overview'
   | 'providers'
@@ -195,7 +262,12 @@ export type Page =
   | 'policies'
   | 'activity'
   | 'settings'
-  | 'chat';
+  | 'chat'
+  | 'runs'
+  | 'run-detail'
+  | 'create-run'
+  | 'setup'
+  | 'connect-ollama';
 
 // ── Chat ────────────────────────────────────────────────────────────
 export interface ChatMessage {

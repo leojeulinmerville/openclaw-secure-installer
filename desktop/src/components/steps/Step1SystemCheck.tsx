@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { CheckDockerResult } from '../types';
+import { CheckDockerResult } from '../../types';
 import { GlassCard } from '../GlassCard';
 import { StatusPill } from '../StatusPill';
-import { ArrowRight, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { ArrowRight, ShieldCheck } from 'lucide-react';
 
 interface Step1Props {
   onNext: () => void;

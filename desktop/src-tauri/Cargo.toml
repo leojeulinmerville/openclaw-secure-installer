@@ -1,6 +1,6 @@
 [package]
 name = "my_openclaw"
-version = "0.1.6"
+version = "0.1.8"
 description = "My OpenClaw – Mission Control for OpenClaw agents"
 authors = ["OpenClaw"]
 edition = "2021"
@@ -21,6 +21,8 @@ uuid = { version = "1", features = ["v4", "fast-rng", "macro-diagnostics"] }
 chrono = { version = "0.4", features = ["serde"] }
 keyring = { version = "3", features = ["windows-native"] }
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
+tokio = { version = "1", features = ["rt", "time", "macros", "fs", "process"] }
+regex = "1"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
