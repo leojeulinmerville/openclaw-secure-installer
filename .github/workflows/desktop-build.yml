@@ -14,6 +14,10 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
+    # Limit parallelism to prevent "Peer disconnected" OOM crashes on Windows runner
+    env:
+      RUSTFLAGS: "-C codegen-units=1"
+      CARGO_BUILD_JOBS: "2"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,7 +61,23 @@ jobs:
         run: cargo test
 
       - name: Build Tauri app
-        run: pnpm -C desktop tauri:build
+        # Retry up to 2 times to handle transient "Peer disconnected" / network issues
+        shell: pwsh
+        run: |
+          $attempts = 0
+          $maxAttempts = 2
+          do {
+            $attempts++
+            Write-Host "Tauri build attempt $attempts / $maxAttempts"
+            pnpm -C desktop tauri:build -- --verbose
+            if ($LASTEXITCODE -eq 0) { break }
+            if ($attempts -ge $maxAttempts) {
+              Write-Error "Tauri build failed after $maxAttempts attempts"
+              exit 1
+            }
+            Write-Warning "Build failed (attempt $attempts), retrying in 30s..."
+            Start-Sleep -Seconds 30
+          } while ($true)
 
       - name: Upload MSI artifact
         uses: actions/upload-artifact@v4
