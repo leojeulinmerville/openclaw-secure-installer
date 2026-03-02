@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager};
 use chrono::Utc;
 use uuid::Uuid;
 use std::io::Write;
@@ -193,6 +193,9 @@ pub fn _append_event(app_handle: &AppHandle, run_id: &str, event_type: &str, pay
         
     writeln!(file, "{}", json).map_err(|e| e.to_string())?;
 
+    // Emit to frontend for real-time streaming
+    let _ = app_handle.emit("run-event", &event);
+
     Ok(event)
 }
 
@@ -374,8 +377,16 @@ fn parse_artifacts(content: &str) -> (String, String, String) {
 async fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, error: Option<String>) -> Result<(), String> {
      if let Ok(mut run) = get_run(app.clone(), run_id.to_string()).await {
          run.status = status;
+         run.updated_at = Utc::now().to_rfc3339();
          run.error = error;
-         _update_run_meta(app, &run)
+         _update_run_meta(app, &run)?;
+         // Emit status change for real-time UI update
+         let _ = app.emit("run-status", serde_json::json!({
+             "run_id": run_id,
+             "status": run.status,
+             "error": run.error
+         }));
+         Ok(())
      } else {
          Ok(()) // ignore
      }

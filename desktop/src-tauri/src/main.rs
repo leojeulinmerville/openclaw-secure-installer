@@ -56,12 +56,13 @@ fn main() {
         agents::unquarantine_agent,
         agents::check_agent_crashloop,
         agents::get_agent_detail,
-        // Chat
+        // Chat / LLM
         chat::chat_send,
         chat::test_ollama_connection,
         llm::ollama_test,
         llm::ollama_list_models,
         llm::ollama_pull_model,
+        llm::ollama_run_test_completion,
         // Runs
         runs::create_run,
         runs::list_runs,

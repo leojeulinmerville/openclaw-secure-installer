@@ -131,6 +131,31 @@ pub async fn ollama_pull_model(app: tauri::AppHandle, endpoint: String, model: S
     Ok(())
 }
 
+#[tauri::command]
+pub async fn ollama_run_test_completion(endpoint: String, model: String) -> Result<String, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let url = format!("{}/api/chat", endpoint.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "model": model,
+        "messages": [{"role": "user", "content": "Say \"OK\" and nothing else."}],
+        "stream": false
+    });
+    let res = client.post(&url).json(&body).send().await
+        .map_err(|e| format!("Connection failed: {}", e))?;
+    if !res.status().is_success() {
+        return Err(format!("Model test failed with status: {}", res.status()));
+    }
+    #[derive(serde::Deserialize)]
+    struct Resp { message: Msg }
+    #[derive(serde::Deserialize)]
+    struct Msg { content: String }
+    let r: Resp = res.json().await.map_err(|e| e.to_string())?;
+    Ok(r.message.content.trim().to_string())
+}
+
 impl LlmClient {
     pub fn new(provider: &str, model: &str, api_base: Option<String>, api_key: Option<String>) -> Self {
         Self {
