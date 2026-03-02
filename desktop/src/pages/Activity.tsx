@@ -32,7 +32,9 @@ export function Activity() {
 
   useEffect(() => {
     refresh();
-    const interval = setInterval(refresh, 10000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') refresh();
+    }, 10000);
     return () => clearInterval(interval);
   }, [refresh]);
 

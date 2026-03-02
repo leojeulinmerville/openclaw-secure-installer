@@ -219,7 +219,14 @@ export type EventType =
   | 'approval.requested'
   | 'approval.approved'
   | 'approval.rejected'
-  | 'artifact.created';
+  | 'approval.resolved'
+  | 'artifact.created'
+  | 'llm.requested'
+  | 'llm.completed'
+  | 'patch.apply.succeeded'
+  | 'patch.apply.failed'
+  // allow any future types without breaking
+  | (string & {});
 
 export interface RunEvent {
   id: string;

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { listAgents, agentInspectHealth } from '../lib/tauri';
+import { useState, useEffect, useRef } from 'react';
+import { listAgents } from '../lib/tauri';
 import type { AgentListItem, Page } from '../types';
 import { StatusPill } from '../components/StatusPill';
 import { relativeTime } from '../lib/format';
@@ -15,44 +15,39 @@ export default function AgentsList({ onNavigate }: Props) {
   const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const cancelledRef = useRef(false);
 
-  // Poll agents list only when gateway is ready
   useEffect(() => {
+    cancelledRef.current = false;
     if (!isGatewayReady) {
       setLoading(false);
       return;
     }
     
-    refresh();
-    const interval = setInterval(refresh, 5000);
-    return () => clearInterval(interval);
-  }, [isGatewayReady]);
+    let mounted = true;
+    const doRefresh = async () => {
+      try {
+        const list = await listAgents();
+        if (mounted) setAgents(list);
+      } catch {
+        // ignore
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
 
-  async function refresh() {
-    try {
-      const list = await listAgents();
-      // Refresh health for running agents (optimization: parallelize or trust list if rich enough)
-      // For now, keep the detailed health check pattern but maybe debounce it later
-      const updated = await Promise.all(
-        list.map(async (a) => {
-          if (a.status === 'running') {
-            try {
-              const health = await agentInspectHealth(a.id);
-              return { ...a, status: health.healthy ? 'running' as const : 'error' as const };
-            } catch {
-              return a;
-            }
-          }
-          return a;
-        })
-      );
-      setAgents(updated);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }
+    doRefresh();
+    // 8s poll — no per-agent Docker exec to prevent UI freeze
+    const interval = setInterval(() => {
+      if (mounted && document.visibilityState === 'visible') doRefresh();
+    }, 8000);
+
+    return () => {
+      mounted = false;
+      cancelledRef.current = true;
+      clearInterval(interval);
+    };
+  }, [isGatewayReady]);
 
   // Gating view
   if (!isGatewayReady) {

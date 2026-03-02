@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { createRun, listAgents } from '../lib/tauri';
+import { createRun, startRun, listAgents } from '../lib/tauri';
 import type { AgentListItem } from '../types';
 import { Play, ArrowLeft, Bot, FolderOpen, Loader2, AlertCircle } from 'lucide-react';
 
 interface CreateRunProps {
-  onNavigate: (page: 'runs') => void;
+  onNavigate: (page: 'runs' | 'run-detail', id?: string) => void;
 }
 
 export function CreateRun({ onNavigate }: CreateRunProps) {
@@ -57,7 +57,7 @@ export function CreateRun({ onNavigate }: CreateRunProps) {
       const agent = agents.find(a => a.id === selectedAgentId);
       if (!agent) throw new Error("Agent not found");
 
-      await createRun(
+      const run = await createRun(
         agent.id,
         agent.provider,
         agent.model,
@@ -66,7 +66,10 @@ export function CreateRun({ onNavigate }: CreateRunProps) {
         workspacePath || agent.workspacePath
       );
       
-      onNavigate('runs');
+      // Auto-start the run immediately
+      await startRun(run.id);
+      // Navigate to the run detail page
+      onNavigate('run-detail' as any, run.id);
     } catch (err) {
       setError(String(err));
       setSubmitting(false);
