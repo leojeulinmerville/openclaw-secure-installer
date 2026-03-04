@@ -19,8 +19,8 @@ ENV OPENCLAW_A2UI_SKIP_MISSING=1
 RUN pnpm build
 ENV OPENCLAW_PREFER_PNPM=1
 RUN pnpm ui:build
+ENV CI=true
 RUN pnpm prune --prod
-
 FROM node:22-bookworm-slim
 
 WORKDIR /home/node
@@ -38,4 +38,4 @@ EXPOSE 8080
 
 USER node
 
-CMD ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan", "--port", "8080"]
+CMD ["node", "dist/entry.js", "gateway", "--allow-unconfigured", "--bind", "lan", "--port", "8080"]

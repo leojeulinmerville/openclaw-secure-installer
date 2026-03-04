@@ -1,0 +1,23 @@
+services:
+  gateway:
+    image: openclaw-gateway:dev
+    command: [ "node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan", "--port", "8080" ]
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - openclaw_home:/home/node
+    environment:
+      OPENCLAW_SAFE_MODE: "1"
+      LOG_LEVEL: info
+      OPENCLAW_CONTAINER_PORT: "8080"
+      OPENCLAW_GATEWAY_TOKEN: ""
+      OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: ""
+      OPENCLAW_ALLOW_INTERNET: "0"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: openclaw-managed
+
+volumes:
+  openclaw_home:
