@@ -47,6 +47,7 @@ export const dockerSmokeTest = () => invoke<GatewayStartResult>('docker_smoke_te
 export const buildLocalImage = () => invoke<BuildResult>('build_local_image');
 export const getGatewayStatus = () => invoke<GatewayStatusResult>('get_gateway_status');
 export const getConsoleInfo = () => invoke<ConsoleInfo>('get_console_info');
+export const openConsoleWindow = () => invoke<void>('open_console_window');
 export const getRuntimeCapabilities = () => invoke<RuntimeCapabilities>('get_runtime_capabilities');
 
 // ── Internet toggle ─────────────────────────────────────────────────

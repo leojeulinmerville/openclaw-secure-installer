@@ -22,10 +22,22 @@ impl CommandResult {
 /// Run a command silently (no window on Windows), capturing stdout/stderr.
 /// Input stdin is null.
 pub fn run_command_capture(exe: &str, args: &[&str], cwd: Option<&Path>) -> Result<CommandResult, String> {
+    run_command_capture_with_env(exe, args, cwd, &[])
+}
+
+pub fn run_command_capture_with_env(
+    exe: &str,
+    args: &[&str],
+    cwd: Option<&Path>,
+    env: &[(&str, &str)],
+) -> Result<CommandResult, String> {
     let mut cmd = Command::new(exe);
     cmd.args(args);
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
+    }
+    if !env.is_empty() {
+        cmd.envs(env.iter().copied());
     }
     
     cmd.stdout(Stdio::piped());
@@ -47,4 +59,12 @@ pub fn run_command_capture(exe: &str, args: &[&str], cwd: Option<&Path>) -> Resu
 /// Helper specifically for running Docker commands silently.
 pub fn run_docker(args: &[&str], cwd: Option<&Path>) -> Result<CommandResult, String> {
     run_command_capture("docker", args, cwd)
+}
+
+pub fn run_docker_with_env(
+    args: &[&str],
+    cwd: Option<&Path>,
+    env: &[(&str, &str)],
+) -> Result<CommandResult, String> {
+    run_command_capture_with_env("docker", args, cwd, env)
 }

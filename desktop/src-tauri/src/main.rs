@@ -43,6 +43,7 @@ fn main() {
         gateway::build_local_image,
         gateway::get_gateway_status,
         gateway::get_console_info,
+        gateway::open_console_window,
         gateway::get_runtime_capabilities,
         // Agent lifecycle
         agents::create_agent,

@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
+use std::sync::{Mutex, OnceLock};
 // use std::process::Command;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
-use crate::state_manager::{get_app_data_dir, load_state, save_state_internal};
+use crate::state_manager::{
+    ensure_gateway_token_for_install, get_app_data_dir, load_state, save_state_internal,
+};
 
 // ── Redaction pipeline ──────────────────────────────────────────────
 
@@ -13,10 +16,33 @@ const SENSITIVE_KEYS: &[&str] = &[
     "JWT_SECRET",
     "SLACK_BOT_TOKEN",
     "STRIPE_SECRET_KEY",
+    "OPENCLAW_GATEWAY_TOKEN",
+    "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN",
 ];
 
 const DEFAULT_HTTP_PORT: u16 = 8080;
 const DEFAULT_CONTROL_UI_BASE_PATH: &str = "";
+const DEFAULT_CONTROL_UI_AUTH_MODE: &str = "token";
+const LOCAL_AUTH_BOOTSTRAP_PATH: &str = "/api/v1/local-auth/bootstrap";
+
+static RUNTIME_BOOTSTRAP_TOKEN: OnceLock<Mutex<Option<String>>> = OnceLock::new();
+
+fn bootstrap_token_store() -> &'static Mutex<Option<String>> {
+    RUNTIME_BOOTSTRAP_TOKEN.get_or_init(|| Mutex::new(None))
+}
+
+fn set_runtime_bootstrap_token(value: Option<String>) {
+    if let Ok(mut guard) = bootstrap_token_store().lock() {
+        *guard = value;
+    }
+}
+
+fn get_runtime_bootstrap_token() -> Option<String> {
+    bootstrap_token_store()
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone())
+}
 
 pub(crate) fn sanitize_output(text: &str) -> String {
     let mut lines = Vec::new();
@@ -120,6 +146,9 @@ pub struct ConsoleInfo {
     pub port: u16,
     pub base_path: String,
     pub ui_available: bool,
+    pub auth_required: bool,
+    pub auth_mode: String,
+    pub insecure_fallback: bool,
     pub diagnostic: String,
 }
 
@@ -154,6 +183,12 @@ pub struct CapabilityOrchestrator {
 #[serde(rename_all = "snake_case")]
 pub struct ControlUiCapability {
     pub base_path: String,
+    #[serde(default)]
+    pub auth_required: bool,
+    #[serde(default)]
+    pub auth_mode: String,
+    #[serde(default)]
+    pub insecure_fallback: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -324,6 +359,25 @@ fn build_console_url(port: u16, base_path: &str) -> String {
     }
 }
 
+fn build_console_bootstrap_url(port: u16, base_path: &str, bootstrap_token: &str) -> String {
+    let normalized = normalize_base_path(base_path);
+    let next_path = if normalized.is_empty() {
+        "/".to_string()
+    } else {
+        format!("{}/", normalized)
+    };
+    let mut url =
+        reqwest::Url::parse(&format!("http://127.0.0.1:{}{}", port, LOCAL_AUTH_BOOTSTRAP_PATH))
+            .unwrap_or_else(|_| {
+                reqwest::Url::parse(&format!("http://127.0.0.1:{}/", port))
+                    .expect("bootstrap fallback URL must parse")
+            });
+    url.query_pairs_mut()
+        .append_pair("token", bootstrap_token)
+        .append_pair("next", &next_path);
+    url.to_string()
+}
+
 fn empty_capabilities() -> RuntimeCapabilities {
     RuntimeCapabilities {
         version: "v1".to_string(),
@@ -331,6 +385,9 @@ fn empty_capabilities() -> RuntimeCapabilities {
         safe_mode: true,
         control_ui: ControlUiCapability {
             base_path: String::new(),
+            auth_required: true,
+            auth_mode: DEFAULT_CONTROL_UI_AUTH_MODE.to_string(),
+            insecure_fallback: true,
         },
         channels: vec![],
         tools: vec![],
@@ -338,14 +395,19 @@ fn empty_capabilities() -> RuntimeCapabilities {
     }
 }
 
-async fn fetch_gateway_capabilities(port: u16) -> Result<RuntimeCapabilities, String> {
+async fn fetch_gateway_capabilities(app: &AppHandle, port: u16) -> Result<RuntimeCapabilities, String> {
     let url = format!("http://127.0.0.1:{}/api/v1/capabilities", port);
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(4))
         .build()
         .map_err(|e| format!("Failed to build capabilities HTTP client: {}", e))?;
-    let response = client
-        .get(&url)
+    let state = load_state(app);
+    let token = ensure_gateway_token_for_install(app, &state.install_id).ok();
+    let mut request = client.get(&url);
+    if let Some(ref gateway_token) = token {
+        request = request.bearer_auth(gateway_token);
+    }
+    let response = request
         .send()
         .await
         .map_err(|e| format!("Capabilities request failed: {}", e))?;
@@ -666,6 +728,8 @@ pub fn generate_compose_content(image: &str) -> String {
       - OPENCLAW_SAFE_MODE=1
       - LOG_LEVEL=info
       - OPENCLAW_CONTAINER_PORT=8080
+      - OPENCLAW_GATEWAY_TOKEN=${{OPENCLAW_GATEWAY_TOKEN:-}}
+      - OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN=${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}
     restart: unless-stopped
 
 networks:
@@ -752,6 +816,9 @@ pub async fn is_gateway_running(app: AppHandle) -> Result<GatewayStartResult, St
 pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String> {
     let dir = get_app_data_dir(&app)?;
     let compose_file = dir.join("docker-compose.yml");
+    let state = load_state(&app);
+    let gateway_token = ensure_gateway_token_for_install(&app, &state.install_id)?;
+    let bootstrap_token = format!("desktop-bootstrap-{}", uuid::Uuid::new_v4().simple());
 
     if !compose_file.exists() {
         return Ok(GatewayStartResult {
@@ -769,6 +836,9 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     // 1) Check if already running BEFORE compose up (strict, no stability window)
     let (pre_running, _) = check_gateway_strictly(&dir, false);
     if pre_running {
+        if get_runtime_bootstrap_token().is_none() {
+            set_runtime_bootstrap_token(None);
+        }
         return Ok(GatewayStartResult {
             gateway_active: true,
             status: "already_running".into(),
@@ -796,8 +866,16 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
         });
     }
 
-    let output = crate::process::run_docker(&["compose", "up", "-d"], Some(&dir))
-        .map_err(|e| format!("Failed to execute docker: {}", e))?;
+    let compose_env = [
+        ("OPENCLAW_GATEWAY_TOKEN", gateway_token.as_str()),
+        (
+            "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN",
+            bootstrap_token.as_str(),
+        ),
+    ];
+    let output =
+        crate::process::run_docker_with_env(&["compose", "up", "-d"], Some(&dir), &compose_env)
+            .map_err(|e| format!("Failed to execute docker: {}", e))?;
 
     let success = output.success();
     let stdout = output.stdout;
@@ -806,6 +884,7 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
 
     // 3) If exit code != 0 → check if maybe running anyway (strict)
     if !success {
+        set_runtime_bootstrap_token(None);
         let (post_running, _inspect_diag) = check_gateway_strictly(&dir, false);
         if post_running {
             return Ok(GatewayStartResult {
@@ -839,6 +918,7 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     let (is_stable, inspect_diag) = check_gateway_strictly(&dir, true);
 
     if is_stable {
+        set_runtime_bootstrap_token(Some(bootstrap_token));
         // 5) Health probe — try /health on configured HTTP port
         let http_port = read_http_port(&dir);
         let health = probe_health(http_port);
@@ -867,6 +947,7 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
             warning: health_warning,
         })
     } else {
+        set_runtime_bootstrap_token(None);
         // Container started but is crashing / restarting
         let logs = get_gateway_logs(&dir);
         let full_diag = format!(
@@ -1146,6 +1227,7 @@ pub async fn open_app_data_folder(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn stop_gateway(app: AppHandle) -> Result<String, String> {
     let dir = get_app_data_dir(&app)?;
+    set_runtime_bootstrap_token(None);
 
     // Check if we should stop agents
     let mut state = load_state(&app);
@@ -1282,9 +1364,17 @@ pub async fn get_console_info(app: AppHandle) -> Result<ConsoleInfo, String> {
     let mut ui_available = false;
     let mut diagnostic = String::new();
     let mut capabilities_reachable = false;
+    let mut auth_required = true;
+    let mut auth_mode = DEFAULT_CONTROL_UI_AUTH_MODE.to_string();
+    let mut insecure_fallback = true;
 
-    if let Ok(capabilities) = fetch_gateway_capabilities(port).await {
+    if let Ok(capabilities) = fetch_gateway_capabilities(&app, port).await {
         capabilities_reachable = true;
+        auth_required = capabilities.control_ui.auth_required || auth_required;
+        if !capabilities.control_ui.auth_mode.trim().is_empty() {
+            auth_mode = capabilities.control_ui.auth_mode.trim().to_string();
+        }
+        insecure_fallback = capabilities.control_ui.insecure_fallback || auth_mode != "cookie";
         let capability_path = normalize_base_path(&capabilities.control_ui.base_path);
         if check_control_ui_candidate(port, &capability_path)
             .await
@@ -1324,13 +1414,65 @@ pub async fn get_console_info(app: AppHandle) -> Result<ConsoleInfo, String> {
         }
     }
 
+    if !capabilities_reachable {
+        if get_runtime_bootstrap_token().is_some() {
+            auth_mode = "cookie".to_string();
+            insecure_fallback = false;
+        } else {
+            auth_mode = DEFAULT_CONTROL_UI_AUTH_MODE.to_string();
+            insecure_fallback = true;
+        }
+    }
+    if insecure_fallback {
+        if diagnostic.is_empty() {
+            diagnostic = "Console is running in auth fallback mode (cookie bootstrap unavailable)."
+                .to_string();
+        } else {
+            diagnostic.push_str(" Auth fallback is active (cookie bootstrap unavailable).");
+        }
+    }
+
     Ok(ConsoleInfo {
         url: build_console_url(port, &base_path),
         port,
         base_path,
         ui_available,
+        auth_required,
+        auth_mode,
+        insecure_fallback,
         diagnostic,
     })
+}
+
+#[tauri::command]
+pub async fn open_console_window(app: AppHandle) -> Result<(), String> {
+    let info = get_console_info(app.clone()).await?;
+    let target_url = if let Some(bootstrap_token) = get_runtime_bootstrap_token() {
+        build_console_bootstrap_url(info.port, &info.base_path, &bootstrap_token)
+    } else {
+        info.url.clone()
+    };
+    let parsed =
+        reqwest::Url::parse(&target_url).map_err(|e| format!("Invalid console URL: {}", e))?;
+
+    if let Some(existing) = app.get_webview_window("openclaw-console") {
+        let _ = existing.close();
+    }
+
+    let window = WebviewWindowBuilder::new(
+        &app,
+        "openclaw-console",
+        WebviewUrl::External(parsed),
+    )
+    .title("OpenClaw Console")
+    .inner_size(1400.0, 920.0)
+    .center()
+    .build()
+    .map_err(|e| format!("Failed to open console window: {}", e))?;
+    window
+        .set_focus()
+        .map_err(|e| format!("Failed to focus console window: {}", e))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -1342,7 +1484,7 @@ pub async fn get_runtime_capabilities(app: AppHandle) -> Result<RuntimeCapabilit
     }
 
     let port = read_http_port(&dir);
-    let mut capabilities = fetch_gateway_capabilities(port)
+    let mut capabilities = fetch_gateway_capabilities(&app, port)
         .await
         .unwrap_or_else(|_| empty_capabilities());
 
@@ -1354,6 +1496,14 @@ pub async fn get_runtime_capabilities(app: AppHandle) -> Result<RuntimeCapabilit
             normalized
         }
     };
+    if capabilities.control_ui.auth_mode.trim().is_empty() {
+        capabilities.control_ui.auth_mode = DEFAULT_CONTROL_UI_AUTH_MODE.to_string();
+    }
+    if !capabilities.control_ui.auth_required {
+        capabilities.control_ui.auth_required = true;
+    }
+    capabilities.control_ui.insecure_fallback =
+        capabilities.control_ui.insecure_fallback || capabilities.control_ui.auth_mode != "cookie";
 
     let state = load_state(&app);
     for tool in capabilities.tools.iter_mut() {
@@ -1520,6 +1670,21 @@ mod tests {
     }
 
     #[test]
+    fn test_compose_forwards_gateway_auth_env_vars() {
+        let content = generate_compose_content("openclaw-gateway:dev");
+        assert!(
+            content.contains("OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}"),
+            "Compose must forward OPENCLAW_GATEWAY_TOKEN at runtime"
+        );
+        assert!(
+            content.contains(
+                "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN=${OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}"
+            ),
+            "Compose must forward OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN at runtime"
+        );
+    }
+
+    #[test]
     fn test_read_http_port_defaults_to_8080() {
         let tmp = std::env::temp_dir().join("test_port_default");
         let _ = std::fs::create_dir_all(&tmp);
@@ -1573,6 +1738,30 @@ mod tests {
     }
 
     #[test]
+    fn test_build_console_bootstrap_url_stays_localhost_and_sanitizes_next_path() {
+        let url = build_console_bootstrap_url(
+            8080,
+            "https://evil.example/openclaw?x=1",
+            "desktop-bootstrap-token",
+        );
+        let parsed = reqwest::Url::parse(&url).expect("Bootstrap URL should be valid");
+        assert_eq!(parsed.host_str(), Some("127.0.0.1"));
+        assert_eq!(parsed.path(), LOCAL_AUTH_BOOTSTRAP_PATH);
+        let mut token = None;
+        let mut next = None;
+        for (key, value) in parsed.query_pairs() {
+            if key == "token" {
+                token = Some(value.to_string());
+            }
+            if key == "next" {
+                next = Some(value.to_string());
+            }
+        }
+        assert_eq!(token.as_deref(), Some("desktop-bootstrap-token"));
+        assert_eq!(next.as_deref(), Some("/openclaw/"));
+    }
+
+    #[test]
     fn test_empty_capabilities_is_safe_structure() {
         let payload = empty_capabilities();
         assert_eq!(payload.version, "v1");
@@ -1581,6 +1770,9 @@ mod tests {
         assert!(payload.tools.is_empty());
         assert!(payload.orchestrators.is_empty());
         assert_eq!(payload.control_ui.base_path, "");
+        assert!(payload.control_ui.auth_required);
+        assert_eq!(payload.control_ui.auth_mode, DEFAULT_CONTROL_UI_AUTH_MODE);
+        assert!(payload.control_ui.insecure_fallback);
     }
 
     // -- is_healthy --

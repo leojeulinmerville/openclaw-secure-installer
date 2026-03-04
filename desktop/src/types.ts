@@ -96,6 +96,9 @@ export interface ConsoleInfo {
   port: number;
   base_path: string;
   ui_available: boolean;
+  auth_required: boolean;
+  auth_mode: string;
+  insecure_fallback: boolean;
   diagnostic: string;
 }
 
@@ -125,6 +128,9 @@ export interface RuntimeCapabilities {
   safe_mode: boolean;
   control_ui: {
     base_path: string;
+    auth_required?: boolean;
+    auth_mode?: 'cookie' | 'header-injection' | 'token' | 'password';
+    insecure_fallback?: boolean;
   };
   channels: CapabilityChannel[];
   tools: CapabilityTool[];

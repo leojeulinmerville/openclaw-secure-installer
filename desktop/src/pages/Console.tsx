@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { AlertTriangle, ExternalLink, Loader2, Monitor, RefreshCcw, ShieldAlert } from 'lucide-react';
 import { useDesktop } from '../contexts/DesktopContext';
-import { getConsoleInfo, getRuntimeCapabilities } from '../lib/tauri';
+import { getConsoleInfo, getRuntimeCapabilities, openConsoleWindow as openConsoleWindowCommand } from '../lib/tauri';
 import type { ConsoleInfo, RuntimeCapabilities } from '../types';
 
 const EMPTY_CAPABILITIES: RuntimeCapabilities = {
   version: 'v1',
   generated_at: '',
   safe_mode: true,
-  control_ui: { base_path: '' },
+  control_ui: { base_path: '', auth_required: true, auth_mode: 'token', insecure_fallback: true },
   channels: [],
   tools: [],
   orchestrators: [],
@@ -51,19 +50,7 @@ export function Console() {
       return false;
     }
     try {
-      const existing = await WebviewWindow.getByLabel('openclaw-console');
-      if (existing) {
-        await existing.setFocus();
-        return true;
-      }
-      const win = new WebviewWindow('openclaw-console', {
-        title: 'OpenClaw Console',
-        url: consoleInfo.url,
-        width: 1400,
-        height: 920,
-        center: true,
-      });
-      await win.setFocus();
+      await openConsoleWindowCommand();
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -107,6 +94,9 @@ export function Console() {
     ];
   }, [consoleInfo?.port]);
   const canOpenInAppWindow = Boolean(consoleInfo?.url && consoleInfo?.ui_available);
+  const authMode = capabilities.control_ui.auth_mode ?? consoleInfo?.auth_mode ?? 'token';
+  const insecureAuthFallback =
+    capabilities.control_ui.insecure_fallback ?? consoleInfo?.insecure_fallback ?? false;
 
   if (!isGatewayReady) {
     return (
@@ -165,6 +155,12 @@ export function Console() {
         <div className="bg-amber-500/10 border border-amber-500/25 text-amber-100 text-xs rounded-xl px-3 py-2 inline-flex items-center gap-2">
           <ShieldAlert className="w-4 h-4" />
           Safe Mode is active. Internet/network tools may be blocked by policy.
+        </div>
+      )}
+      {insecureAuthFallback && (
+        <div className="bg-red-500/10 border border-red-500/25 text-red-100 text-xs rounded-xl px-3 py-2 inline-flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4" />
+          Console auth fallback mode is active ({authMode}). Restart gateway from desktop to enable cookie auth.
         </div>
       )}
 

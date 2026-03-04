@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::agents::AgentEntry;
 use crate::gateway::generate_compose_content;
+use crate::secrets::{get_secret_internal, set_secret_internal, GATEWAY_TOKEN_SECRET_KEY};
 
 pub const DEFAULT_GATEWAY_IMAGE: &str = "ghcr.io/leojeulinmerville/openclaw-gateway:stable";
 
@@ -78,6 +79,69 @@ fn migrate_state(state: &mut InstallerState) {
   }
 }
 
+fn extract_env_var(line: &str, key: &str) -> Option<String> {
+  let trimmed = line.trim();
+  let prefix = format!("{}=", key);
+  let value = trimmed.strip_prefix(&prefix)?;
+  let normalized = value.trim().trim_matches('"').trim_matches('\'').to_string();
+  if normalized.is_empty() {
+    None
+  } else {
+    Some(normalized)
+  }
+}
+
+fn migrate_gateway_token_from_env(app: &AppHandle) -> Result<(), String> {
+  let dir = get_app_data_dir(app)?;
+  let env_path = dir.join(".env");
+  if !env_path.exists() {
+    return Ok(());
+  }
+
+  let content = fs::read_to_string(&env_path).map_err(|e| e.to_string())?;
+  let mut imported_token: Option<String> = None;
+  let mut kept_lines: Vec<String> = Vec::new();
+
+  for line in content.lines() {
+    if let Some(token) = extract_env_var(line, "OPENCLAW_GATEWAY_TOKEN") {
+      imported_token = Some(token);
+      continue;
+    }
+    kept_lines.push(line.to_string());
+  }
+
+  if let Some(token) = imported_token {
+    if get_secret_internal(app, GATEWAY_TOKEN_SECRET_KEY).is_none() {
+      set_secret_internal(app, GATEWAY_TOKEN_SECRET_KEY, &token)?;
+    }
+    let mut rewritten = kept_lines.join("\n");
+    if !rewritten.is_empty() {
+      rewritten.push('\n');
+    }
+    fs::write(&env_path, rewritten).map_err(|e| e.to_string())?;
+  }
+
+  Ok(())
+}
+
+pub fn ensure_gateway_token_for_install(
+  app: &AppHandle,
+  install_id: &str,
+) -> Result<String, String> {
+  migrate_gateway_token_from_env(app)?;
+
+  if let Some(existing) = get_secret_internal(app, GATEWAY_TOKEN_SECRET_KEY) {
+    let token = existing.trim().to_string();
+    if !token.is_empty() {
+      return Ok(token);
+    }
+  }
+
+  let token = format!("desktop-{}", install_id.trim());
+  set_secret_internal(app, GATEWAY_TOKEN_SECRET_KEY, &token)?;
+  Ok(token)
+}
+
 pub fn get_app_data_dir(app: &AppHandle) -> Result<PathBuf, String> {
   app
     .path()
@@ -131,12 +195,14 @@ pub async fn get_state(app: AppHandle) -> Result<InstallerState, String> {
     let mut state: InstallerState = serde_json::from_str(&content).map_err(|e| e.to_string())?;
     state.app_data_dir = dir.to_string_lossy().to_string();
     migrate_state(&mut state);
+    let _ = ensure_gateway_token_for_install(&app, &state.install_id);
     Ok(state)
   } else {
     let mut state = InstallerState::default();
     state.app_data_dir = dir.to_string_lossy().to_string();
     let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
     fs::write(&state_path, json).map_err(|e| e.to_string())?;
+    let _ = ensure_gateway_token_for_install(&app, &state.install_id);
     Ok(state)
   }
 }
@@ -164,15 +230,15 @@ pub async fn configure_installation(
   let image = gateway_image.unwrap_or_else(|| DEFAULT_GATEWAY_IMAGE.to_string());
   let expose_lan = expose_gateway_to_lan.unwrap_or(false);
   let bind_host = if expose_lan { "0.0.0.0" } else { "127.0.0.1" };
-  let gateway_token = format!("desktop-{}", current_state.install_id);
+  let _gateway_token = ensure_gateway_token_for_install(&app, &current_state.install_id)?;
 
   // Track whether user chose privileged ports explicitly.
   let advanced = http_port == 80 || http_port == 443 || https_port == 80 || https_port == 443;
 
   // Write .env
   let env_content = format!(
-    "OPENCLAW_HTTP_PORT={}\nOPENCLAW_HTTPS_PORT={}\nOPENCLAW_BIND_HOST={}\nOPENCLAW_GATEWAY_TOKEN={}\nOPENCLAW_SAFE_MODE=1\nLOG_LEVEL=info\n",
-    http_port, https_port, bind_host, gateway_token
+    "OPENCLAW_HTTP_PORT={}\nOPENCLAW_HTTPS_PORT={}\nOPENCLAW_BIND_HOST={}\nOPENCLAW_GATEWAY_TOKEN_REF=keychain:{}\nOPENCLAW_SAFE_MODE=1\nLOG_LEVEL=info\n",
+    http_port, https_port, bind_host, GATEWAY_TOKEN_SECRET_KEY
   );
   fs::write(dir.join(".env"), env_content).map_err(|e| e.to_string())?;
 

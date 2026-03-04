@@ -12,6 +12,7 @@ use tauri::{AppHandle, Manager};
 //
 // Service name is used as the namespace inside the credential store.
 const KEYRING_SERVICE: &str = "my-openclaw";
+pub const GATEWAY_TOKEN_SECRET_KEY: &str = "gateway.auth.token";
 
 /// Legacy plaintext store – only used for one-time migration.
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -61,15 +62,7 @@ fn migrate_legacy_secrets(app: &AppHandle) {
 
 #[tauri::command]
 pub async fn set_secret(app: AppHandle, key: String, value: String) -> Result<(), String> {
-  // Ensure legacy migration has happened.
-  migrate_legacy_secrets(&app);
-
-  let entry = keyring::Entry::new(KEYRING_SERVICE, &key)
-    .map_err(|e| format!("Keyring error: {}", e))?;
-  entry
-    .set_password(&value)
-    .map_err(|e| format!("Failed to store secret: {}", e))?;
-  Ok(())
+  set_secret_internal(&app, &key, &value)
 }
 
 #[tauri::command]
@@ -105,4 +98,15 @@ pub fn get_secret_internal(app: &AppHandle, key: &str) -> Option<String> {
 
   let entry = keyring::Entry::new(KEYRING_SERVICE, key).ok()?;
   entry.get_password().ok()
+}
+
+pub fn set_secret_internal(app: &AppHandle, key: &str, value: &str) -> Result<(), String> {
+  migrate_legacy_secrets(app);
+
+  let entry = keyring::Entry::new(KEYRING_SERVICE, key)
+    .map_err(|e| format!("Keyring error: {}", e))?;
+  entry
+    .set_password(value)
+    .map_err(|e| format!("Failed to store secret: {}", e))?;
+  Ok(())
 }
