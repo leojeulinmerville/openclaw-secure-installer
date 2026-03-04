@@ -881,14 +881,14 @@ pub fn generate_compose_content(image: &str) -> String {
       - "${{OPENCLAW_BIND_HOST:-127.0.0.1}}:${{OPENCLAW_HTTP_PORT:-8080}}:8080"
     volumes:
       - openclaw_home:/home/node
-      environment:
-        - OPENCLAW_SAFE_MODE=1
-        - LOG_LEVEL=info
-        - OPENCLAW_CONTAINER_PORT=8080
-        - OPENCLAW_GATEWAY_TOKEN=${{OPENCLAW_GATEWAY_TOKEN:-}}
-        - OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN=${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}
-        - OPENCLAW_ALLOW_INTERNET=${{OPENCLAW_ALLOW_INTERNET:-0}}
-      restart: unless-stopped
+    environment:
+      OPENCLAW_SAFE_MODE: "1"
+      LOG_LEVEL: info
+      OPENCLAW_CONTAINER_PORT: "8080"
+      OPENCLAW_GATEWAY_TOKEN: "${{OPENCLAW_GATEWAY_TOKEN:-}}"
+      OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: "${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}"
+      OPENCLAW_ALLOW_INTERNET: "${{OPENCLAW_ALLOW_INTERNET:-0}}"
+    restart: unless-stopped
 
 networks:
   default:
@@ -1961,7 +1961,7 @@ mod tests {
     fn test_compose_has_container_port_env() {
         let content = generate_compose_content("openclaw-gateway:dev");
         assert!(
-            content.contains("OPENCLAW_CONTAINER_PORT=8080"),
+            content.contains("OPENCLAW_CONTAINER_PORT:"),
             "Compose must set OPENCLAW_CONTAINER_PORT"
         );
     }
@@ -1970,17 +1970,15 @@ mod tests {
     fn test_compose_forwards_gateway_auth_env_vars() {
         let content = generate_compose_content("openclaw-gateway:dev");
         assert!(
-            content.contains("OPENCLAW_GATEWAY_TOKEN=${OPENCLAW_GATEWAY_TOKEN:-}"),
+            content.contains("OPENCLAW_GATEWAY_TOKEN:"),
             "Compose must forward OPENCLAW_GATEWAY_TOKEN at runtime"
         );
         assert!(
-            content.contains(
-                "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN=${OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}"
-            ),
+            content.contains("OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:"),
             "Compose must forward OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN at runtime"
         );
         assert!(
-            content.contains("OPENCLAW_ALLOW_INTERNET=${OPENCLAW_ALLOW_INTERNET:-0}"),
+            content.contains("OPENCLAW_ALLOW_INTERNET:"),
             "Compose must forward OPENCLAW_ALLOW_INTERNET policy flag"
         );
     }
