@@ -77,7 +77,8 @@ This starts the Vite dev server and the Tauri shell.
 - The desktop app now includes an **OpenClaw Console** page that loads the upstream gateway Control UI directly.
 - URL resolution is dynamic and uses:
   - configured gateway port from installer state (`OPENCLAW_HTTP_PORT`, default `8080`)
-  - Control UI base path from gateway capabilities (`/api/v1/capabilities`, default `/openclaw`)
+  - Control UI base path from gateway capabilities (`/api/v1/capabilities`, default root `/`)
+  - Control UI auto-probe fallback candidates when capability path is missing/non-HTML: `/`, `/openclaw/`, `/ui/`, `/console/`, `/app/`
 - Effective in-app URL format:
   - `http://127.0.0.1:<port><base_path>/`
 - Console opens in a dedicated **Tauri WebviewWindow** by default (Windows reliability-first).
@@ -143,7 +144,9 @@ Bundle output is placed under `desktop/src-tauri/target/release/bundle`.
 - If Console is blank:
   - confirm gateway is running and healthy (`check_gateway_health`)
   - confirm configured HTTP port is reachable (`http://127.0.0.1:<port>/health`)
-  - confirm Control UI base path (`/openclaw` by default)
+  - confirm gateway root is reachable (`http://127.0.0.1:<port>/`)
+  - if Console diagnostic says no HTML route found, this gateway image does not bundle Control UI
+  - rebuild/update gateway image with Control UI or run a separate control-ui service
   - use **Open In-App Window** to refocus/reopen the dedicated Console window
 - If gateway should be local-only but is reachable from another host:
   - verify `OPENCLAW_BIND_HOST=127.0.0.1` in app data `.env`

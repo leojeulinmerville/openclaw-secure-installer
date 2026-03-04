@@ -1513,6 +1513,12 @@ mod tests {
     }
 
     #[test]
+    fn test_normalize_base_path_handles_empty_string() {
+        assert_eq!(normalize_base_path(""), "");
+        assert_eq!(normalize_base_path("   "), "");
+    }
+
+    #[test]
     fn test_console_base_path_sanitization_prevents_host_injection() {
         assert_eq!(
             normalize_base_path("https://evil.example/openclaw?token=abc"),
@@ -1526,6 +1532,14 @@ mod tests {
     }
 
     #[test]
+    fn test_build_console_url_always_uses_loopback_host() {
+        let url = build_console_url(8080, "https://evil.example/console");
+        let parsed = reqwest::Url::parse(&url).expect("Console URL should be valid");
+        assert_eq!(parsed.host_str(), Some("127.0.0.1"));
+        assert!(!url.contains("evil.example"));
+    }
+
+    #[test]
     fn test_empty_capabilities_is_safe_structure() {
         let payload = empty_capabilities();
         assert_eq!(payload.version, "v1");
@@ -1533,7 +1547,7 @@ mod tests {
         assert!(payload.channels.is_empty());
         assert!(payload.tools.is_empty());
         assert!(payload.orchestrators.is_empty());
-        assert_eq!(payload.control_ui.base_path, "/openclaw");
+        assert_eq!(payload.control_ui.base_path, "");
     }
 
     // -- is_healthy --
