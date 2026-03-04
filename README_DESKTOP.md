@@ -80,7 +80,17 @@ This starts the Vite dev server and the Tauri shell.
   - Control UI base path from gateway capabilities (`/api/v1/capabilities`, default `/openclaw`)
 - Effective in-app URL format:
   - `http://127.0.0.1:<port><base_path>/`
-- If embedded rendering is blocked, use **Open In-App Window** (Tauri webview) or **Open Browser**.
+- Console opens in a dedicated **Tauri WebviewWindow** by default (Windows reliability-first).
+- Browser open remains available as a fallback.
+
+### Gateway binding defaults
+- Gateway port publish is localhost-only by default:
+  - compose mapping uses `OPENCLAW_BIND_HOST` with default `127.0.0.1`
+- Installer includes an explicit advanced toggle:
+  - **Expose gateway to LAN**
+  - enabled = `OPENCLAW_BIND_HOST=0.0.0.0`
+  - disabled (default) = `OPENCLAW_BIND_HOST=127.0.0.1`
+- Only enable LAN exposure if remote clients are required and firewall policy is in place.
 
 ### Runtime capability discovery
 - Desktop queries `get_runtime_capabilities` (Tauri command).
@@ -95,7 +105,7 @@ This starts the Vite dev server and the Tauri shell.
 ### Safe Mode posture
 - Gateway compose is started with `OPENCLAW_SAFE_MODE=1`.
 - In Safe Mode, plugin discovery is limited to bundled plugins by upstream runtime policy.
-- Desktop marks network-scoped tools as blocked when `allow_internet=false`.
+- Desktop capability response keeps `scope` unchanged and sets `blocked_by_policy=true` when `allow_internet=false`.
 
 ### checkDocker behavior
 checkDocker verifies:
@@ -134,7 +144,10 @@ Bundle output is placed under `desktop/src-tauri/target/release/bundle`.
   - confirm gateway is running and healthy (`check_gateway_health`)
   - confirm configured HTTP port is reachable (`http://127.0.0.1:<port>/health`)
   - confirm Control UI base path (`/openclaw` by default)
-  - if iframe embedding is blocked, use **Open In-App Window**
+  - use **Open In-App Window** to refocus/reopen the dedicated Console window
+- If gateway should be local-only but is reachable from another host:
+  - verify `OPENCLAW_BIND_HOST=127.0.0.1` in app data `.env`
+  - disable **Expose gateway to LAN** in installer/settings and restart gateway
 - If capabilities are empty while gateway is running:
   - check `http://127.0.0.1:<port>/api/v1/capabilities`
   - if auth/proxy rules block it, local desktop fallback remains safe-empty
