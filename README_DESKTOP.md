@@ -233,3 +233,21 @@ $env:OPENCLAW_E2E_POOL='forks'; pnpm test:e2e:windows
 ```
 
 If `spawn EPERM` still occurs, your environment may block child-process execution (for example AppLocker/AV policy on `node_modules\esbuild`). Use an allowlisted workspace path and retry.
+
+### Smoke fallback (no vitest/esbuild/vite)
+When vitest startup is blocked by `spawn EPERM`, run the standalone smoke check:
+
+```text
+pnpm smoke:connections
+```
+
+The smoke runner:
+- checks `GET /health` returns HTTP 200
+- bootstraps a local session cookie via `/api/v1/auth/bootstrap` (with fallback to `/api/v1/local-auth/bootstrap`)
+- validates cookie-auth access to:
+  - `GET /api/v1/connections/schema`
+  - `GET /api/v1/connections/status`
+
+Environment:
+- `OPENCLAW_GATEWAY_BASE_URL` (optional, default `http://127.0.0.1:8080`)
+- `OPENCLAW_SMOKE_BOOTSTRAP_TOKEN` (or `OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN`) required for cookie bootstrap
