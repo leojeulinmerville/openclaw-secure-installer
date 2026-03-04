@@ -1,9 +1,14 @@
 import type { IncomingMessage } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { GatewayAuthConfig, GatewayTailscaleMode } from "../config/config.js";
 import { readTailscaleWhoisIdentity, type TailscaleWhoisIdentity } from "../infra/tailscale.js";
 import { isTrustedProxyAddress, parseForwardedForClientIp, resolveGatewayClientIp } from "./net.js";
 export type ResolvedGatewayAuthMode = "token" | "password";
+
+export const LOCAL_SESSION_COOKIE_NAME = "openclaw_local_session";
+const LOCAL_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const LOCAL_SESSION_MAX_FUTURE_SKEW_MS = 60 * 1000;
+const DESKTOP_BOOTSTRAP_TOKEN_ENV = "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN";
 
 export type ResolvedGatewayAuth = {
   mode: ResolvedGatewayAuthMode;
@@ -14,7 +19,7 @@ export type ResolvedGatewayAuth = {
 
 export type GatewayAuthResult = {
   ok: boolean;
-  method?: "token" | "password" | "tailscale" | "device-token";
+  method?: "token" | "password" | "tailscale" | "device-token" | "local-session";
   user?: string;
   reason?: string;
 };
@@ -37,6 +42,145 @@ function safeEqual(a: string, b: string): boolean {
     return false;
   }
   return timingSafeEqual(Buffer.from(a), Buffer.from(b));
+}
+
+function getDesktopBootstrapToken(env?: NodeJS.ProcessEnv): string | undefined {
+  const value = env?.[DESKTOP_BOOTSTRAP_TOKEN_ENV];
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+export function isLocalSessionAuthEnabled(env?: NodeJS.ProcessEnv): boolean {
+  return Boolean(getDesktopBootstrapToken(env ?? process.env));
+}
+
+export function buildLocalSessionCookieValue(params?: {
+  bootstrapToken?: string;
+  env?: NodeJS.ProcessEnv;
+  nowMs?: number;
+}): string | undefined {
+  const secret = params?.bootstrapToken ?? getDesktopBootstrapToken(params?.env ?? process.env);
+  if (!secret) {
+    return undefined;
+  }
+  const issuedAtMs = Math.max(0, Math.floor(params?.nowMs ?? Date.now()));
+  const nonce = randomUUID().replace(/-/g, "");
+  const payload = `${issuedAtMs}.${nonce}`;
+  const signature = createHmac("sha256", secret).update(payload).digest("hex");
+  return `${payload}.${signature}`;
+}
+
+export function verifyDesktopBootstrapToken(params: {
+  token?: string | null;
+  env?: NodeJS.ProcessEnv;
+}): boolean {
+  const expected = getDesktopBootstrapToken(params.env ?? process.env);
+  const provided = params.token?.trim() ?? "";
+  if (!expected || !provided) {
+    return false;
+  }
+  return safeEqual(provided, expected);
+}
+
+function parseCookieHeader(header: string | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!header) {
+    return map;
+  }
+  for (const entry of header.split(";")) {
+    const part = entry.trim();
+    if (!part) {
+      continue;
+    }
+    const eq = part.indexOf("=");
+    if (eq <= 0) {
+      continue;
+    }
+    const key = part.slice(0, eq).trim();
+    const value = part.slice(eq + 1).trim();
+    if (!key || !value) {
+      continue;
+    }
+    map.set(key, value);
+  }
+  return map;
+}
+
+function getCookie(req: IncomingMessage | undefined, key: string): string | undefined {
+  if (!req) {
+    return undefined;
+  }
+  const raw = headerValue(req.headers?.cookie);
+  if (!raw) {
+    return undefined;
+  }
+  return parseCookieHeader(raw).get(key);
+}
+
+function verifyLocalSessionCookieValue(params: {
+  cookieValue?: string;
+  bootstrapToken?: string;
+  env?: NodeJS.ProcessEnv;
+  nowMs?: number;
+}): boolean {
+  const secret = params.bootstrapToken ?? getDesktopBootstrapToken(params.env ?? process.env);
+  const value = params.cookieValue?.trim() ?? "";
+  if (!secret || !value) {
+    return false;
+  }
+
+  const parts = value.split(".");
+  if (parts.length !== 3) {
+    return false;
+  }
+  const [issuedAtRaw, nonce, signature] = parts;
+  if (!issuedAtRaw || !nonce || !signature) {
+    return false;
+  }
+  if (!/^\d+$/.test(issuedAtRaw) || !/^[a-f0-9]{64}$/i.test(signature)) {
+    return false;
+  }
+  if (!/^[a-z0-9]+$/i.test(nonce)) {
+    return false;
+  }
+  const issuedAt = Number(issuedAtRaw);
+  if (!Number.isFinite(issuedAt)) {
+    return false;
+  }
+  const nowMs = params.nowMs ?? Date.now();
+  if (issuedAt > nowMs + LOCAL_SESSION_MAX_FUTURE_SKEW_MS) {
+    return false;
+  }
+  if (nowMs - issuedAt > LOCAL_SESSION_TTL_MS) {
+    return false;
+  }
+
+  const payload = `${issuedAtRaw}.${nonce}`;
+  const expected = createHmac("sha256", secret).update(payload).digest("hex");
+  return safeEqual(signature, expected);
+}
+
+export function isValidLocalSessionRequest(params: {
+  req?: IncomingMessage;
+  trustedProxies?: string[];
+  env?: NodeJS.ProcessEnv;
+}): boolean {
+  if (!isLocalDirectRequest(params.req, params.trustedProxies)) {
+    return false;
+  }
+  const cookieValue = getCookie(params.req, LOCAL_SESSION_COOKIE_NAME);
+  return verifyLocalSessionCookieValue({
+    cookieValue,
+    env: params.env ?? process.env,
+  });
+}
+
+export function buildLocalSessionSetCookieHeader(cookieValue: string): string {
+  const maxAgeSeconds = Math.floor(LOCAL_SESSION_TTL_MS / 1000);
+  return `${LOCAL_SESSION_COOKIE_NAME}=${cookieValue}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
 }
 
 function normalizeLogin(login: string): string {
@@ -240,11 +384,27 @@ export async function authorizeGatewayConnect(params: {
   connectAuth?: ConnectAuth | null;
   req?: IncomingMessage;
   trustedProxies?: string[];
+  env?: NodeJS.ProcessEnv;
   tailscaleWhois?: TailscaleWhoisLookup;
 }): Promise<GatewayAuthResult> {
   const { auth, connectAuth, req, trustedProxies } = params;
   const tailscaleWhois = params.tailscaleWhois ?? readTailscaleWhoisIdentity;
   const localDirect = isLocalDirectRequest(req, trustedProxies);
+  const env = params.env ?? process.env;
+
+  if (
+    isValidLocalSessionRequest({
+      req,
+      trustedProxies,
+      env,
+    })
+  ) {
+    return {
+      ok: true,
+      method: "local-session",
+      user: "local",
+    };
+  }
 
   if (auth.allowTailscale && !localDirect) {
     const tailscaleCheck = await resolveVerifiedTailscaleUser({

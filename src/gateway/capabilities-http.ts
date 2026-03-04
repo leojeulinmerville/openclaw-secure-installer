@@ -18,7 +18,11 @@ import {
   sendUnauthorized,
 } from "./http-common.js";
 import { getBearerToken } from "./http-utils.js";
-import { authorizeGatewayConnect, isLocalDirectRequest, type ResolvedGatewayAuth } from "./auth.js";
+import {
+  authorizeGatewayConnect,
+  isLocalSessionAuthEnabled,
+  type ResolvedGatewayAuth,
+} from "./auth.js";
 import { listGatewayMethods } from "./server-methods-list.js";
 
 type ChannelCapability = {
@@ -47,6 +51,9 @@ type CapabilitiesResponse = {
   safe_mode: boolean;
   control_ui: {
     base_path: string;
+    auth_required: boolean;
+    auth_mode: "cookie" | "header-injection" | "token" | "password";
+    insecure_fallback: boolean;
   };
   channels: ChannelCapability[];
   tools: ToolCapability[];
@@ -219,9 +226,6 @@ async function canReadCapabilities(params: {
   auth: ResolvedGatewayAuth;
   trustedProxies: string[] | undefined;
 }) {
-  if (isLocalDirectRequest(params.req, params.trustedProxies ?? [])) {
-    return true;
-  }
   const token = getBearerToken(params.req);
   const authResult = await authorizeGatewayConnect({
     auth: { ...params.auth, allowTailscale: false },
@@ -259,6 +263,9 @@ export async function handleGatewayCapabilitiesHttpRequest(
     safe_mode: isSafeMode(),
     control_ui: {
       base_path: resolveCapabilitiesControlUiBasePath(cfg),
+      auth_required: true,
+      auth_mode: isLocalSessionAuthEnabled(process.env) ? "cookie" : opts.auth.mode,
+      insecure_fallback: !isLocalSessionAuthEnabled(process.env),
     },
     channels: await buildChannels(),
     tools: buildTools(),

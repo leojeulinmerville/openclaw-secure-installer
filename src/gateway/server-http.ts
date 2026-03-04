@@ -25,6 +25,7 @@ import {
   handleControlUiHttpRequest,
   type ControlUiRootState,
 } from "./control-ui.js";
+import { handleLocalSessionAuthHttpRequest } from "./local-auth-http.js";
 import { applyHookMappings } from "./hooks-mapping.js";
 import {
   extractHookToken,
@@ -332,6 +333,13 @@ export function createGatewayHttpServer(opts: {
       const configSnapshot = loadConfig();
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
       if (await handleHooksRequest(req, res)) {
+        return;
+      }
+      if (
+        await handleLocalSessionAuthHttpRequest(req, res, {
+          trustedProxies,
+        })
+      ) {
         return;
       }
       if (

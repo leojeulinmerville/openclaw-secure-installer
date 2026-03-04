@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { authorizeGatewayConnect } from "./auth.js";
+import {
+  authorizeGatewayConnect,
+  buildLocalSessionCookieValue,
+  LOCAL_SESSION_COOKIE_NAME,
+  verifyDesktopBootstrapToken,
+} from "./auth.js";
 
 describe("gateway auth", () => {
   it("does not throw when req is missing socket", async () => {
@@ -97,5 +102,40 @@ describe("gateway auth", () => {
     expect(res.ok).toBe(true);
     expect(res.method).toBe("tailscale");
     expect(res.user).toBe("peter");
+  });
+
+  it("accepts local session cookie for loopback requests", async () => {
+    const bootstrap = "desktop-bootstrap-secret";
+    const cookie = buildLocalSessionCookieValue({
+      bootstrapToken: bootstrap,
+      nowMs: 1_700_000_000_000,
+    });
+    expect(cookie).toBeTruthy();
+
+    const res = await authorizeGatewayConnect({
+      auth: { mode: "token", token: "secret", allowTailscale: false },
+      connectAuth: null,
+      env: {
+        OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: bootstrap,
+      } as NodeJS.ProcessEnv,
+      req: {
+        socket: { remoteAddress: "127.0.0.1" },
+        headers: {
+          host: "127.0.0.1:8080",
+          cookie: `${LOCAL_SESSION_COOKIE_NAME}=${cookie}`,
+        },
+      } as never,
+    });
+
+    expect(res.ok).toBe(true);
+    expect(res.method).toBe("local-session");
+  });
+
+  it("validates bootstrap token using constant-time comparison", () => {
+    const env = {
+      OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: "desktop-bootstrap-secret",
+    } as NodeJS.ProcessEnv;
+    expect(verifyDesktopBootstrapToken({ token: "desktop-bootstrap-secret", env })).toBe(true);
+    expect(verifyDesktopBootstrapToken({ token: "wrong", env })).toBe(false);
   });
 });
