@@ -46,6 +46,7 @@ import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
 import { handleGatewayCapabilitiesHttpRequest } from "./capabilities-http.js";
+import { handleGatewayConnectionsHttpRequest } from "./connections-http.js";
 import { isSafeMode } from "../infra/safe-mode.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
@@ -352,6 +353,14 @@ export function createGatewayHttpServer(opts: {
       }
       if (
         await handleGatewayCapabilitiesHttpRequest(req, res, {
+          auth: resolvedAuth,
+          trustedProxies,
+        })
+      ) {
+        return;
+      }
+      if (
+        await handleGatewayConnectionsHttpRequest(req, res, {
           auth: resolvedAuth,
           trustedProxies,
         })
