@@ -127,6 +127,28 @@ This starts the Vite dev server and the Tauri shell.
 - Upstream Control UI then uses normal same-origin requests (HTTP + WS) without storing gateway token in UI JavaScript.
 - If cookie bootstrap is unavailable, Console shows an explicit insecure-fallback warning.
 
+## Connections (Phase 2 no-code setup)
+- Desktop now includes a **Connections** page for runtime-discovered no-code setup.
+- Source of truth is gateway runtime discovery (no hardcoded desktop channel/provider lists):
+  - `GET /api/v1/connections/schema`
+  - `GET /api/v1/connections/status`
+- Configure and test actions are cookie-auth protected local endpoints:
+  - `POST /api/v1/connections/:kind/:id/configure`
+  - `POST /api/v1/connections/:kind/:id/test`
+- Current first integrations:
+  - Telegram channel (`bot_token`, optional `default_chat_id`)
+  - OpenAI-compatible provider (`api_key`, optional `base_url`, optional `model`)
+
+### Secrets model for Connections
+- Desktop stores connection secrets in OS keychain (Windows Credential Manager).
+- Configure requests send `secret_refs` (for example `connections.provider.openai.api_key`) rather than plaintext persistence.
+- Gateway config/state stores keychain reference placeholders (for example `keychain://connections.provider.openai.api_key`) and never writes raw secrets to `.env`.
+- Runtime tests may use plaintext secret values in loopback request bodies only; those values are not persisted in gateway config files.
+
+### Safe Mode behavior for Connections
+- In Safe Mode with `allow_internet=false`, networked connection tests return policy-blocked results.
+- The schema advertises this via `test_capabilities.blocked_by_policy`, and status surfaces the last blocked error.
+
 ### Safe Mode posture
 - Gateway compose is started with `OPENCLAW_SAFE_MODE=1`.
 - In Safe Mode, plugin discovery is limited to bundled plugins by upstream runtime policy.
@@ -182,12 +204,25 @@ Bundle output is placed under `desktop/src-tauri/target/release/bundle`.
 - If capabilities are empty while gateway is running:
   - check `http://127.0.0.1:<port>/api/v1/capabilities`
   - if auth/proxy rules block it, local desktop fallback remains safe-empty
+- If Connections configure fails with `bot_token is required` or `api_key is required`:
+  - enter the secret in the Setup form once and click **Save Setup**
+  - desktop writes the secret to keychain and resends configure using `secret_refs`
+  - retry **Test** after saving
+- If Connection test returns blocked by policy:
+  - keep Safe Mode and enable internet only when explicitly needed
+  - set installer/runtime `allow_internet=true` and restart gateway to permit network tests
 
 ## Windows e2e command
 Use the Windows-safe runner (sets `TMP`/`TEMP` to a workspace-local folder and defaults Vitest pool to `threads`):
 
 ```text
 pnpm test:e2e:windows
+```
+
+Run only the new Connections gateway test:
+
+```text
+pnpm test:e2e:windows -- src/gateway/connections-http.e2e.test.ts
 ```
 
 Optional overrides:
