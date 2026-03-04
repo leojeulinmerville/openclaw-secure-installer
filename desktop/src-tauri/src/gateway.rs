@@ -1047,19 +1047,52 @@ pub async fn test_gateway_ollama_access(app: AppHandle) -> Result<bool, String> 
 #[tauri::command]
 pub async fn build_local_image(context_path: String) -> Result<BuildResult, String> {
     let context = std::path::Path::new(&context_path);
-    if !context.join("Dockerfile").exists() {
+    let tag = "openclaw-gateway:dev";
+    let mut build_dir = context.to_path_buf();
+    let mut args: Vec<String> = vec!["build".into(), "-t".into(), tag.into()];
+
+    let repo_context_has_gateway_dockerfile = context.join("gateway").join("Dockerfile").exists();
+    let direct_context_has_dockerfile = context.join("Dockerfile").exists();
+
+    if repo_context_has_gateway_dockerfile {
+        args.push("-f".into());
+        args.push("gateway/Dockerfile".into());
+        args.push(".".into());
+    } else if direct_context_has_dockerfile {
+        let looks_like_gateway_subdir = context
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.eq_ignore_ascii_case("gateway"))
+            .unwrap_or(false);
+        let parent_repo = context.parent().filter(|parent| {
+            parent.join("package.json").exists() && parent.join("gateway").join("Dockerfile").exists()
+        });
+
+        if looks_like_gateway_subdir {
+            if let Some(parent) = parent_repo {
+                build_dir = parent.to_path_buf();
+                args.push("-f".into());
+                args.push("gateway/Dockerfile".into());
+                args.push(".".into());
+            } else {
+                args.push(".".into());
+            }
+        } else {
+            args.push(".".into());
+        }
+    } else {
         return Ok(BuildResult {
             success: false,
             image_tag: String::new(),
             logs: format!(
-                "No Dockerfile found at {}. Ensure the build context contains a valid Dockerfile.",
+                "No Dockerfile found for local build.\nExpected either:\n- {0}\\Dockerfile\n- {0}\\gateway\\Dockerfile",
                 context.display()
             ),
         });
     }
 
-    let tag = "openclaw-gateway:dev";
-    let output = crate::process::run_docker(&["build", "-t", tag, "."], Some(context))
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    let output = crate::process::run_docker(&arg_refs, Some(&build_dir))
         .map_err(|e| format!("Failed to run docker build: {}", e))?;
 
     let success = output.success();

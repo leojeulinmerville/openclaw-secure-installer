@@ -20,7 +20,7 @@ export function Step3Gateway({ onNext, activeImage, onImageChange }: Step3Props)
   const [publicInput, setPublicInput] = useState(activeImage.includes('/') && !activeImage.includes('openclaw-gateway:dev') ? activeImage : "ghcr.io/leojeulinmerville/openclaw-gateway:stable");
   const [registryUrl, setRegistryUrl] = useState("ghcr.io");
   const [privateImage, setPrivateImage] = useState("");
-  const [buildContext, setBuildContext] = useState("D:\\MVP\\openclaw-secure-installer\\gateway"); // default hint
+  const [buildContext, setBuildContext] = useState("."); // repo root preferred
 
   // Diagnostics
   const [pullStatus, setPullStatus] = useState<'idle'|'testing'|'ok'|'bad'>('idle');
