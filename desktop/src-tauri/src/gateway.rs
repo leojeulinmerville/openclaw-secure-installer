@@ -16,7 +16,7 @@ const SENSITIVE_KEYS: &[&str] = &[
 ];
 
 const DEFAULT_HTTP_PORT: u16 = 8080;
-const DEFAULT_CONTROL_UI_BASE_PATH: &str = "/openclaw";
+const DEFAULT_CONTROL_UI_BASE_PATH: &str = "";
 
 pub(crate) fn sanitize_output(text: &str) -> String {
     let mut lines = Vec::new();
@@ -328,7 +328,7 @@ fn empty_capabilities() -> RuntimeCapabilities {
         generated_at: chrono::Utc::now().to_rfc3339(),
         safe_mode: true,
         control_ui: ControlUiCapability {
-            base_path: DEFAULT_CONTROL_UI_BASE_PATH.to_string(),
+            base_path: String::new(),
         },
         channels: vec![],
         tools: vec![],

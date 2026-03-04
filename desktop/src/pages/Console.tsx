@@ -10,7 +10,7 @@ const EMPTY_CAPABILITIES: RuntimeCapabilities = {
   version: 'v1',
   generated_at: '',
   safe_mode: true,
-  control_ui: { base_path: '/openclaw' },
+  control_ui: { base_path: '' },
   channels: [],
   tools: [],
   orchestrators: [],
