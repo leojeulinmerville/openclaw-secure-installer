@@ -29,6 +29,7 @@ type ToolCapability = {
   id: string;
   display_name: string;
   scope: string;
+  blocked_by_policy: boolean;
 };
 
 type OrchestratorCapability = {
@@ -164,6 +165,7 @@ function buildTools(): ToolCapability[] {
     id: tool.name,
     display_name: toDisplayLabel(tool.name),
     scope: inferToolScope(tool),
+    blocked_by_policy: false,
   }));
 }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { GlassCard } from '../GlassCard';
-import { ArrowRight, Settings2 } from 'lucide-react';
+import { ArrowRight, AlertTriangle, Settings2 } from 'lucide-react';
+import { configureInstallation } from '../../lib/tauri';
 
 interface Step2Props {
   onNext: () => void;
@@ -9,18 +9,15 @@ interface Step2Props {
 }
 
 export function Step2Configure({ onNext, activeImage }: Step2Props) {
-  const [httpPort, setHttpPort] = useState(80);
-  const [httpsPort, setHttpsPort] = useState(443);
+  const [httpPort, setHttpPort] = useState(8080);
+  const [httpsPort, setHttpsPort] = useState(8443);
+  const [exposeGatewayToLan, setExposeGatewayToLan] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const saveConfig = async () => {
     setSaving(true);
     try {
-      await invoke("configure_installation", {
-        httpPort,
-        httpsPort,
-        gatewayImage: activeImage,
-      });
+      await configureInstallation(httpPort, httpsPort, activeImage, exposeGatewayToLan);
       onNext();
     } catch (err) {
       alert("Configuration failed: " + err);
@@ -44,7 +41,7 @@ export function Step2Configure({ onNext, activeImage }: Step2Props) {
               value={httpPort}
               onChange={(e) => setHttpPort(parseInt(e.target.value) || 0)}
               className="glass-input"
-              placeholder="80"
+              placeholder="8080"
             />
           </div>
           <div className="space-y-2">
@@ -54,16 +51,40 @@ export function Step2Configure({ onNext, activeImage }: Step2Props) {
               value={httpsPort}
               onChange={(e) => setHttpsPort(parseInt(e.target.value) || 0)}
               className="glass-input"
-              placeholder="443"
+              placeholder="8443"
             />
           </div>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-white/10 bg-white/[0.03] p-4">
+          <label className="flex items-center justify-between gap-3 text-sm text-white/80">
+            <span>Expose gateway to LAN (advanced)</span>
+            <button
+              type="button"
+              onClick={() => setExposeGatewayToLan(!exposeGatewayToLan)}
+              className={`w-10 h-5 rounded-full relative transition-colors ${exposeGatewayToLan ? 'bg-amber-500' : 'bg-white/10'}`}
+            >
+              <span className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${exposeGatewayToLan ? 'left-6' : 'left-1'}`} />
+            </button>
+          </label>
+          <p className="text-xs text-white/50">
+            Default is localhost-only (`127.0.0.1`) for safety. Enable LAN exposure only if you need remote clients on your network.
+          </p>
+          {exposeGatewayToLan && (
+            <div className="flex items-start gap-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/25 rounded-lg p-3">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+              <span>
+                Gateway will listen on all interfaces (`0.0.0.0`). Restrict access with host firewall rules and trusted network boundaries.
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 flex gap-3 text-sm text-blue-200">
            <Settings2 className="w-5 h-5 shrink-0" />
            <p>
-             The installer uses <strong>Host Networking</strong> by mapping these ports.
-             If you have another web server (IIS, Apache, Nginx) running on port 80/443, please stop it or change these ports.
+             The installer maps the container port to your selected local host ports.
+             If another service already uses these ports, choose different values.
            </p>
         </div>
 

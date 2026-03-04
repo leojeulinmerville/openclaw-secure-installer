@@ -137,6 +137,8 @@ pub struct CapabilityTool {
     pub id: String,
     pub display_name: String,
     pub scope: String,
+    #[serde(default)]
+    pub blocked_by_policy: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -257,21 +259,57 @@ fn read_http_port(dir: &Path) -> u16 {
     DEFAULT_HTTP_PORT
 }
 
+fn is_safe_path_segment(segment: &str) -> bool {
+    segment
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '~'))
+}
+
 fn normalize_base_path(raw: &str) -> String {
-    let mut value = raw.trim().to_string();
-    if value.is_empty() {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
         return String::new();
     }
-    if !value.starts_with('/') {
-        value.insert(0, '/');
+
+    let mut candidate = if trimmed.contains("://") {
+        match reqwest::Url::parse(trimmed) {
+            Ok(url) => url.path().to_string(),
+            Err(_) => String::new(),
+        }
+    } else {
+        trimmed.to_string()
+    };
+    if candidate.is_empty() {
+        return String::new();
     }
-    while value.len() > 1 && value.ends_with('/') {
-        value.pop();
+
+    candidate = candidate.replace('\\', "/");
+    if let Some(idx) = candidate.find('?') {
+        candidate.truncate(idx);
     }
-    if value == "/" {
+    if let Some(idx) = candidate.find('#') {
+        candidate.truncate(idx);
+    }
+    if !candidate.starts_with('/') {
+        candidate.insert(0, '/');
+    }
+
+    let mut segments: Vec<&str> = Vec::new();
+    for segment in candidate.split('/') {
+        let seg = segment.trim();
+        if seg.is_empty() || seg == "." || seg == ".." {
+            continue;
+        }
+        if !is_safe_path_segment(seg) {
+            return String::new();
+        }
+        segments.push(seg);
+    }
+
+    if segments.is_empty() {
         String::new()
     } else {
-        value
+        format!("/{}", segments.join("/"))
     }
 }
 
@@ -539,7 +577,7 @@ pub fn generate_compose_content(image: &str) -> String {
     image: {}
     command: ["node", "openclaw.mjs", "gateway"]
     ports:
-      - "${{OPENCLAW_HTTP_PORT:-80}}:8080"
+      - "${{OPENCLAW_BIND_HOST:-127.0.0.1}}:${{OPENCLAW_HTTP_PORT:-8080}}:8080"
     volumes:
       - openclaw_home:/home/node
     environment:
@@ -1164,12 +1202,8 @@ pub async fn get_runtime_capabilities(app: AppHandle) -> Result<RuntimeCapabilit
     };
 
     let state = load_state(&app);
-    if !state.allow_internet {
-        for tool in capabilities.tools.iter_mut() {
-            if tool.scope == "network" {
-                tool.scope = "network_blocked".to_string();
-            }
-        }
+    for tool in capabilities.tools.iter_mut() {
+        tool.blocked_by_policy = !state.allow_internet && tool.scope == "network";
     }
 
     Ok(capabilities)
@@ -1316,10 +1350,10 @@ mod tests {
     #[test]
     fn test_compose_maps_host_to_container_8080() {
         let content = generate_compose_content("openclaw-gateway:dev");
-        // Port mapping should be host → 8080 (container)
-        assert!(content.contains(":8080\""), "Compose must map to container port 8080");
-        // Must NOT map to container port 80
-        assert!(!content.contains(":80\""), "Compose must not map to container port 80");
+        assert!(
+            content.contains("${OPENCLAW_BIND_HOST:-127.0.0.1}:${OPENCLAW_HTTP_PORT:-8080}:8080"),
+            "Compose must default to localhost binding and container port 8080"
+        );
     }
 
     #[test]
@@ -1355,6 +1389,19 @@ mod tests {
             "http://127.0.0.1:9090/openclaw/"
         );
         assert_eq!(build_console_url(8080, "/"), "http://127.0.0.1:8080/");
+    }
+
+    #[test]
+    fn test_console_base_path_sanitization_prevents_host_injection() {
+        assert_eq!(
+            normalize_base_path("https://evil.example/openclaw?token=abc"),
+            "/openclaw"
+        );
+        assert_eq!(normalize_base_path("javascript:alert(1)"), "");
+        assert_eq!(
+            build_console_url(8080, "https://evil.example/openclaw?token=abc"),
+            "http://127.0.0.1:8080/openclaw/"
+        );
     }
 
     #[test]

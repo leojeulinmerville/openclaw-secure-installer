@@ -27,6 +27,9 @@ pub struct InstallerState {
   /// When true the user explicitly chose 80/443 in the Advanced panel.
   #[serde(default)]
   pub advanced_ports: bool,
+  /// When true the gateway HTTP port is exposed on all interfaces (LAN).
+  #[serde(default)]
+  pub expose_gateway_to_lan: bool,
   /// Managed agents (backwards-compatible: defaults to empty vec).
   #[serde(default)]
   pub agents: Vec<AgentEntry>,
@@ -54,6 +57,7 @@ impl Default for InstallerState {
       app_data_dir: String::new(),
       gateway_image: DEFAULT_GATEWAY_IMAGE.to_string(),
       advanced_ports: false,
+      expose_gateway_to_lan: false,
       agents: Vec::new(),
       allow_internet: false,
       stop_agents_on_gateway_stop: false,
@@ -152,18 +156,21 @@ pub async fn configure_installation(
   http_port: u16,
   https_port: u16,
   gateway_image: Option<String>,
+  expose_gateway_to_lan: Option<bool>,
 ) -> Result<(), String> {
   let dir = get_app_data_dir(&app)?;
 
   let image = gateway_image.unwrap_or_else(|| DEFAULT_GATEWAY_IMAGE.to_string());
+  let expose_lan = expose_gateway_to_lan.unwrap_or(false);
+  let bind_host = if expose_lan { "0.0.0.0" } else { "127.0.0.1" };
 
   // Track whether user chose privileged ports explicitly.
   let advanced = http_port == 80 || http_port == 443 || https_port == 80 || https_port == 443;
 
   // Write .env
   let env_content = format!(
-    "OPENCLAW_HTTP_PORT={}\nOPENCLAW_HTTPS_PORT={}\nOPENCLAW_SAFE_MODE=1\nLOG_LEVEL=info\n",
-    http_port, https_port
+    "OPENCLAW_HTTP_PORT={}\nOPENCLAW_HTTPS_PORT={}\nOPENCLAW_BIND_HOST={}\nOPENCLAW_SAFE_MODE=1\nLOG_LEVEL=info\n",
+    http_port, https_port, bind_host
   );
   fs::write(dir.join(".env"), env_content).map_err(|e| e.to_string())?;
 
@@ -181,6 +188,7 @@ pub async fn configure_installation(
       state.https_port = https_port;
       state.gateway_image = image;
       state.advanced_ports = advanced;
+      state.expose_gateway_to_lan = expose_lan;
       let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
       fs::write(&state_path, json).map_err(|e| e.to_string())?;
     }
@@ -259,6 +267,7 @@ mod tests {
         assert!(!state.install_id.is_empty());
         assert_eq!(state.gateway_image, DEFAULT_GATEWAY_IMAGE);
         assert!(!state.advanced_ports);
+        assert!(!state.expose_gateway_to_lan);
     }
 
     #[test]
@@ -312,5 +321,12 @@ mod tests {
 "#;
         let state: InstallerState = serde_json::from_str(json).expect("Should deserialize");
         assert!(!state.allow_internet);
+    }
+
+    #[test]
+    fn test_expose_gateway_to_lan_backwards_compat() {
+        let json = r#"{"install_id":"abc","created_at":"2025-01-01","status":"configured","compose_project_name":"p","http_port":8080,"https_port":8443,"app_data_dir":"."}"#;
+        let state: InstallerState = serde_json::from_str(json).expect("Should deserialize");
+        assert!(!state.expose_gateway_to_lan);
     }
 }

@@ -17,7 +17,7 @@ export function Step4Dashboard({ startResult, onStop }: Step4Props) {
   const [runtimeLogs, setRuntimeLogs] = useState("");
   const [showLogs, setShowLogs] = useState(false);
   const [stopping, setStopping] = useState(false);
-  const [dashboardUrl, setDashboardUrl] = useState("http://localhost");
+  const [dashboardUrl, setDashboardUrl] = useState("http://127.0.0.1");
 
   const checkHealth = async () => {
     setChecking(true);
@@ -58,7 +58,7 @@ export function Step4Dashboard({ startResult, onStop }: Step4Props) {
       const info = await getConsoleInfo();
       setDashboardUrl(info.url);
     } catch {
-      setDashboardUrl("http://localhost:8080/openclaw/");
+      setDashboardUrl("http://127.0.0.1:8080/openclaw/");
     }
   };
 

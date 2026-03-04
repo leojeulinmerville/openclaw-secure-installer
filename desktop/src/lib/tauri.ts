@@ -25,8 +25,13 @@ export const checkDocker = () => invoke<CheckDockerResult>('check_docker');
 // ── State ───────────────────────────────────────────────────────────
 export const getState = () => invoke<InstallerState>('get_state');
 export const saveState = (state: InstallerState) => invoke<void>('save_state', { state });
-export const configureInstallation = (httpPort: number, httpsPort: number, gatewayImage?: string) =>
-  invoke<void>('configure_installation', { httpPort, httpsPort, gatewayImage });
+export const configureInstallation = (
+  httpPort: number,
+  httpsPort: number,
+  gatewayImage?: string,
+  exposeGatewayToLan?: boolean,
+) =>
+  invoke<void>('configure_installation', { httpPort, httpsPort, gatewayImage, exposeGatewayToLan });
 export const saveGatewayImage = (image: string) => invoke<void>('save_gateway_image', { image });
 
 // ── Gateway lifecycle ───────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 import { ExternalLink, Loader2, Monitor, RefreshCcw, ShieldAlert } from 'lucide-react';
@@ -17,13 +17,12 @@ const EMPTY_CAPABILITIES: RuntimeCapabilities = {
 };
 
 export function Console() {
-  const { isGatewayReady, gatewayStatus, allowInternet, startGateway } = useDesktop();
+  const { isGatewayReady, gatewayStatus, startGateway } = useDesktop();
   const [loading, setLoading] = useState(true);
   const [consoleInfo, setConsoleInfo] = useState<ConsoleInfo | null>(null);
   const [capabilities, setCapabilities] = useState<RuntimeCapabilities>(EMPTY_CAPABILITIES);
   const [error, setError] = useState<string | null>(null);
-  const [frameLoaded, setFrameLoaded] = useState(false);
-  const [frameStuck, setFrameStuck] = useState(false);
+  const [autoOpenedForUrl, setAutoOpenedForUrl] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -35,8 +34,6 @@ export function Console() {
       ]);
       setConsoleInfo(nextConsoleInfo);
       setCapabilities(nextCapabilities);
-      setFrameLoaded(false);
-      setFrameStuck(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
       setCapabilities(EMPTY_CAPABILITIES);
@@ -49,45 +46,50 @@ export function Console() {
     void load();
   }, [gatewayStatus?.containerStable, gatewayStatus?.healthOk]);
 
+  const openConsoleWindow = useCallback(async () => {
+    if (!consoleInfo?.url) {
+      return false;
+    }
+    try {
+      const existing = await WebviewWindow.getByLabel('openclaw-console');
+      if (existing) {
+        await existing.setFocus();
+        return true;
+      }
+      const win = new WebviewWindow('openclaw-console', {
+        title: 'OpenClaw Console',
+        url: consoleInfo.url,
+        width: 1400,
+        height: 920,
+        center: true,
+      });
+      await win.setFocus();
+      return true;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return false;
+    }
+  }, [consoleInfo?.url]);
+
   useEffect(() => {
-    if (frameLoaded) {
+    if (!isGatewayReady || !consoleInfo?.url || autoOpenedForUrl === consoleInfo.url) {
       return;
     }
-    const timer = setTimeout(() => {
-      setFrameStuck(true);
-    }, 7000);
-    return () => clearTimeout(timer);
-  }, [frameLoaded, consoleInfo?.url]);
+    void openConsoleWindow().then((opened) => {
+      if (opened) {
+        setAutoOpenedForUrl(consoleInfo.url);
+      }
+    });
+  }, [isGatewayReady, consoleInfo?.url, autoOpenedForUrl, openConsoleWindow]);
 
-  const canUseEmbeddedFrame = Boolean(consoleInfo?.url) && !frameStuck;
-  const toolsWithInternetState = useMemo(
+  const toolsWithPolicy = useMemo(
     () =>
       capabilities.tools.map((tool) => ({
         ...tool,
-        blockedByInternetPolicy:
-          tool.scope === 'network_blocked' || (!allowInternet && tool.scope.startsWith('network')),
+        blockedByPolicy: tool.blocked_by_policy,
       })),
-    [capabilities.tools, allowInternet],
+    [capabilities.tools],
   );
-
-  const openConsoleWindow = async () => {
-    if (!consoleInfo?.url) {
-      return;
-    }
-    const existing = await WebviewWindow.getByLabel('openclaw-console');
-    if (existing) {
-      await existing.setFocus();
-      return;
-    }
-    const win = new WebviewWindow('openclaw-console', {
-      title: 'OpenClaw Console',
-      url: consoleInfo.url,
-      width: 1400,
-      height: 920,
-      center: true,
-    });
-    await win.setFocus();
-  };
 
   if (!isGatewayReady) {
     return (
@@ -95,7 +97,7 @@ export function Console() {
         <div className="glass-panel p-6 space-y-3">
           <h2 className="text-xl font-bold text-white">OpenClaw Console</h2>
           <p className="text-sm text-white/60">
-            Start the gateway first, then this page will load the upstream OpenClaw control UI.
+            Start the gateway first, then the Console opens in a dedicated in-app window.
           </p>
           <button
             onClick={() => void startGateway().then(load)}
@@ -122,14 +124,14 @@ export function Console() {
           <button onClick={() => void load()} className="glass-button text-sm">
             <RefreshCcw className="w-4 h-4" />
           </button>
-          <button onClick={() => void openConsoleWindow()} className="glass-button text-sm">
+          <button onClick={() => void openConsoleWindow()} className="glass-button-accent text-sm">
             <Monitor className="w-4 h-4" />
             Open In-App Window
           </button>
           {consoleInfo?.url && (
             <button
               onClick={() => void openExternal(consoleInfo.url)}
-              className="glass-button-accent text-sm"
+              className="glass-button text-sm"
             >
               <ExternalLink className="w-4 h-4" />
               Open Browser
@@ -138,34 +140,27 @@ export function Console() {
         </div>
       </div>
 
-      {!allowInternet && (
+      {capabilities.safe_mode && (
         <div className="bg-amber-500/10 border border-amber-500/25 text-amber-100 text-xs rounded-xl px-3 py-2 inline-flex items-center gap-2">
           <ShieldAlert className="w-4 h-4" />
-          Safe Mode Internet guard is active (`allow_internet=false`).
+          Safe Mode is active. Internet/network tools may be blocked by policy.
         </div>
       )}
 
       {loading ? (
-        <div className="h-[58vh] glass-panel p-8 flex items-center justify-center text-white/60">
+        <div className="glass-panel p-8 flex items-center justify-center text-white/60">
           <Loader2 className="w-5 h-5 animate-spin mr-2" />
-          Loading Console...
-        </div>
-      ) : error ? (
-        <div className="glass-panel p-4 text-sm text-red-200 border border-red-500/30 bg-red-500/10">
-          Failed to load Console metadata: {error}
-        </div>
-      ) : canUseEmbeddedFrame && consoleInfo?.url ? (
-        <div className="h-[58vh] rounded-xl overflow-hidden border border-white/10 bg-black/30">
-          <iframe
-            title="OpenClaw Console"
-            src={consoleInfo.url}
-            className="w-full h-full border-0"
-            onLoad={() => setFrameLoaded(true)}
-          />
+          Loading Console metadata...
         </div>
       ) : (
         <div className="glass-panel p-4 text-sm text-white/70">
-          Embedded frame is unavailable. Use <strong>Open In-App Window</strong>.
+          Console opens in a dedicated Tauri window by default for reliability on Windows.
+        </div>
+      )}
+
+      {error && (
+        <div className="glass-panel p-4 text-sm text-red-200 border border-red-500/30 bg-red-500/10">
+          Console error: {error}
         </div>
       )}
 
@@ -181,11 +176,11 @@ export function Console() {
         />
         <CapabilityCard
           title={`Tools (${capabilities.tools.length})`}
-          rows={toolsWithInternetState.map((tool) => (
+          rows={toolsWithPolicy.map((tool) => (
             <div key={tool.id} className="text-xs text-white/70 flex items-center justify-between gap-2">
               <span>{tool.display_name}</span>
-              <span className={tool.blockedByInternetPolicy ? 'text-amber-300' : 'text-white/40'}>
-                {tool.blockedByInternetPolicy ? 'blocked (internet off)' : tool.scope}
+              <span className={tool.blockedByPolicy ? 'text-amber-300' : 'text-white/40'}>
+                {tool.blockedByPolicy ? 'blocked by policy' : tool.scope}
               </span>
             </div>
           ))}

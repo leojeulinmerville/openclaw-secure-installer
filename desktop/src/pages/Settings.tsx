@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { configureInstallation, openAppDataFolder } from '../lib/tauri';
 import {
-  FolderOpen, Network, HardDrive, Loader2, Info, Wifi, WifiOff, RefreshCw
+  FolderOpen, Network, HardDrive, Loader2, Info, Wifi, WifiOff, RefreshCw, AlertTriangle
 } from 'lucide-react';
 import { useDesktop } from '../contexts/DesktopContext';
 
@@ -12,6 +12,7 @@ export function Settings() {
   const [httpPort, setHttpPort] = useState(8080);
   const [httpsPort, setHttpsPort] = useState(8443);
   const [gatewayImage, setGatewayImage] = useState('');
+  const [exposeGatewayToLan, setExposeGatewayToLan] = useState(false);
   
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -23,13 +24,15 @@ export function Settings() {
       setHttpPort(config.http_port);
       setHttpsPort(config.https_port);
       setGatewayImage(config.gateway_image);
+      setExposeGatewayToLan(Boolean(config.expose_gateway_to_lan));
     }
   }, [config]);
 
   const hasChanges = config && (
     httpPort !== config.http_port ||
     httpsPort !== config.https_port ||
-    gatewayImage !== config.gateway_image
+    gatewayImage !== config.gateway_image ||
+    exposeGatewayToLan !== Boolean(config.expose_gateway_to_lan)
   );
 
   const handleSaveAndRestart = async () => {
@@ -37,7 +40,12 @@ export function Settings() {
     setMessage(null);
     try {
       // 1. Save config
-      await configureInstallation(httpPort, httpsPort, gatewayImage || undefined);
+      await configureInstallation(
+        httpPort,
+        httpsPort,
+        gatewayImage || undefined,
+        exposeGatewayToLan,
+      );
       setMessage('Configuration saved. Restarting gateway...');
       
       // 2. Restart gateway to apply changes
@@ -110,6 +118,29 @@ export function Settings() {
             <span>Privileged ports (&lt;1024) may require admin rights. Recommended: 8080/8443.</span>
           </div>
         )}
+
+        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-white">Expose gateway to LAN (advanced)</p>
+              <p className="text-xs text-white/40">Default is localhost-only (127.0.0.1).</p>
+            </div>
+            <button
+              onClick={() => setExposeGatewayToLan(!exposeGatewayToLan)}
+              className={`w-10 h-5 rounded-full relative transition-colors ${exposeGatewayToLan ? 'bg-amber-500' : 'bg-white/10'}`}
+            >
+              <span className={`absolute top-1 w-3 h-3 rounded-full bg-white transition-all ${exposeGatewayToLan ? 'left-6' : 'left-1'}`} />
+            </button>
+          </div>
+          {exposeGatewayToLan && (
+            <div className="flex items-start gap-2 text-xs text-amber-200 bg-amber-500/10 border border-amber-500/25 p-3 rounded-lg">
+              <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+              <span>
+                Gateway will bind to `0.0.0.0`. Use firewall rules and trusted networks only.
+              </span>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Allow Internet */}

@@ -21,6 +21,7 @@ export interface InstallerState {
   http_port: number;
   https_port: number;
   advanced_ports: boolean;
+  expose_gateway_to_lan?: boolean;
   stop_agents_on_gateway_stop?: boolean;
 }
 
@@ -108,6 +109,7 @@ export interface CapabilityTool {
   id: string;
   display_name: string;
   scope: string;
+  blocked_by_policy: boolean;
 }
 
 export interface CapabilityOrchestrator {
