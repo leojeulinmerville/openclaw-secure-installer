@@ -75,6 +75,10 @@ This starts the Vite dev server and the Tauri shell.
 
 ## OpenClaw Console (Phase 1)
 - The desktop app now includes an **OpenClaw Console** page that loads the upstream gateway Control UI directly.
+- Upstream Control UI source in this repo:
+  - project: `ui/`
+  - build command: `pnpm ui:build`
+  - build output: `dist/control-ui/` (served by gateway HTTP server)
 - URL resolution is dynamic and uses:
   - configured gateway port from installer state (`OPENCLAW_HTTP_PORT`, default `8080`)
   - Control UI base path from gateway capabilities (`/api/v1/capabilities`, default root `/`)
