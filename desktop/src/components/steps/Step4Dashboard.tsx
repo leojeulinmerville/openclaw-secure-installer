@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { GlassCard } from '../GlassCard';
 import { StatusPill } from '../StatusPill';
 import { GatewayStartResult, HealthCheckResult } from '../../types';
-import { getState } from '../../lib/tauri';
+import { getConsoleInfo } from '../../lib/tauri';
 import { Activity, ExternalLink, FileText, FolderOpen, Power, RefreshCw } from 'lucide-react';
 
 interface Step4Props {
@@ -55,12 +55,10 @@ export function Step4Dashboard({ startResult, onStop }: Step4Props) {
 
   const resolveDashboardUrl = async () => {
     try {
-      const state = await getState();
-      const port = typeof state.http_port === "number" ? state.http_port : 80;
-      const url = port === 80 ? "http://localhost" : `http://localhost:${port}`;
-      setDashboardUrl(url);
+      const info = await getConsoleInfo();
+      setDashboardUrl(info.url);
     } catch {
-      setDashboardUrl("http://localhost:8080");
+      setDashboardUrl("http://localhost:8080/openclaw/");
     }
   };
 

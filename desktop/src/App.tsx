@@ -15,8 +15,31 @@ import { RunDetail } from './pages/RunDetail';
 import { CreateRun } from './pages/CreateRun';
 import { Setup } from './pages/Setup';
 import { ConnectOllama } from './pages/ConnectOllama';
+import { Console } from './pages/Console';
+import { PageErrorBoundary } from './components/layout/PageErrorBoundary';
 import { GatewayBanner } from './components/GatewayBanner';
 import { DesktopProvider, useDesktop } from './contexts/DesktopContext';
+
+const CONSOLE_FALLBACK_PAGES = new Set<Page>([
+  'providers',
+  'agents',
+  'agent-detail',
+  'create-agent',
+  'policies',
+  'activity',
+  'chat',
+  'runs',
+  'run-detail',
+  'create-run',
+  'connect-ollama',
+]);
+
+function resolvePage(page: Page): Page {
+  if (CONSOLE_FALLBACK_PAGES.has(page)) {
+    return 'console';
+  }
+  return page;
+}
 
 function AppContent() {
   const [page, setPage] = useState<Page>('overview');
@@ -25,13 +48,16 @@ function AppContent() {
 
   // Navigation helper that accepts optional detail param
   const navigate = (p: Page, detail?: string) => {
-    setPage(p);
+    setPage(resolvePage(p));
     if (detail) setAgentDetailId(detail);
   };
 
+  const currentPage = resolvePage(page);
+
   const renderPage = () => {
-    switch (page) {
+    switch (currentPage) {
       case 'overview':      return <Overview />;
+      case 'console':       return <Console />;
       case 'providers':     return <Providers />;
       case 'agents':        return <AgentsList onNavigate={navigate} />;
       case 'create-agent':  return <CreateAgent onNavigate={navigate} />;
@@ -61,9 +87,11 @@ function AppContent() {
     <div className="app-shell flex flex-col h-screen overflow-hidden">
       <GatewayBanner />
       <div className="flex-1 flex overflow-hidden">
-        <Sidebar page={page} onNavigate={navigate} gatewayOk={!!isGatewayOk} />
+        <Sidebar page={currentPage} onNavigate={navigate} gatewayOk={!!isGatewayOk} />
         <main className="main-content custom-scroll flex-1 bg-gradient-to-br from-gray-900 to-black relative">
-          {renderPage()}
+          <PageErrorBoundary page={currentPage} onOpenConsole={() => navigate('console')}>
+            {renderPage()}
+          </PageErrorBoundary>
         </main>
       </div>
     </div>

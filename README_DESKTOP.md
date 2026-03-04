@@ -73,6 +73,30 @@ pnpm --dir desktop tauri:dev
 
 This starts the Vite dev server and the Tauri shell.
 
+## OpenClaw Console (Phase 1)
+- The desktop app now includes an **OpenClaw Console** page that loads the upstream gateway Control UI directly.
+- URL resolution is dynamic and uses:
+  - configured gateway port from installer state (`OPENCLAW_HTTP_PORT`, default `8080`)
+  - Control UI base path from gateway capabilities (`/api/v1/capabilities`, default `/openclaw`)
+- Effective in-app URL format:
+  - `http://127.0.0.1:<port><base_path>/`
+- If embedded rendering is blocked, use **Open In-App Window** (Tauri webview) or **Open Browser**.
+
+### Runtime capability discovery
+- Desktop queries `get_runtime_capabilities` (Tauri command).
+- Command reads gateway capability data from:
+  - `GET http://127.0.0.1:<port>/api/v1/capabilities`
+- Returned sections are runtime-driven (no hardcoded desktop lists):
+  - channels
+  - tools
+  - orchestrators
+- If gateway is not running or endpoint is unavailable, desktop returns a safe empty structure.
+
+### Safe Mode posture
+- Gateway compose is started with `OPENCLAW_SAFE_MODE=1`.
+- In Safe Mode, plugin discovery is limited to bundled plugins by upstream runtime policy.
+- Desktop marks network-scoped tools as blocked when `allow_internet=false`.
+
 ### checkDocker behavior
 checkDocker verifies:
 - Docker CLI presence (`docker --version`)
@@ -106,3 +130,11 @@ Bundle output is placed under `desktop/src-tauri/target/release/bundle`.
 ## Troubleshooting
 - If `tauri:dev` fails, confirm Rust is installed and in PATH.
 - If the window does not open, verify the dev server is running on port 1420.
+- If Console is blank:
+  - confirm gateway is running and healthy (`check_gateway_health`)
+  - confirm configured HTTP port is reachable (`http://127.0.0.1:<port>/health`)
+  - confirm Control UI base path (`/openclaw` by default)
+  - if iframe embedding is blocked, use **Open In-App Window**
+- If capabilities are empty while gateway is running:
+  - check `http://127.0.0.1:<port>/api/v1/capabilities`
+  - if auth/proxy rules block it, local desktop fallback remains safe-empty

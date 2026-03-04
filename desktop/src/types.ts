@@ -21,6 +21,7 @@ export interface InstallerState {
   http_port: number;
   https_port: number;
   advanced_ports: boolean;
+  stop_agents_on_gateway_stop?: boolean;
 }
 
 // ── Gateway ─────────────────────────────────────────────────────────
@@ -87,6 +88,43 @@ export interface GatewayVersion {
 export interface GatewayCapabilities {
   safe_mode: boolean;
   features: string[];
+}
+
+export interface ConsoleInfo {
+  url: string;
+  port: number;
+  base_path: string;
+}
+
+export interface CapabilityChannel {
+  id: string;
+  display_name: string;
+  requires_pairing: boolean;
+  requires_api_key: boolean;
+  status: 'available' | 'configured' | 'needs_setup' | 'disabled' | 'unknown';
+}
+
+export interface CapabilityTool {
+  id: string;
+  display_name: string;
+  scope: string;
+}
+
+export interface CapabilityOrchestrator {
+  id: string;
+  display_name: string;
+}
+
+export interface RuntimeCapabilities {
+  version: string;
+  generated_at: string;
+  safe_mode: boolean;
+  control_ui: {
+    base_path: string;
+  };
+  channels: CapabilityChannel[];
+  tools: CapabilityTool[];
+  orchestrators: CapabilityOrchestrator[];
 }
 
 export interface GatewayAgent {
@@ -262,6 +300,7 @@ export interface Artifact {
 // ── Navigation (Updated) ────────────────────────────────────────────
 export type Page =
   | 'overview'
+  | 'console'
   | 'providers'
   | 'agents'
   | 'agent-detail'

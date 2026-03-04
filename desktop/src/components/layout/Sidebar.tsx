@@ -9,6 +9,7 @@ import {
   Cloudy,
   MessageCircle,
   Play,
+  PanelTop,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -19,6 +20,7 @@ interface SidebarProps {
 }
 
 const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutDashboard }[] = [
+  { page: 'console',   label: 'OpenClaw Console', icon: PanelTop },
   { page: 'overview',  label: 'Overview',   icon: LayoutDashboard },
   { page: 'providers', label: 'Providers',  icon: Cloudy },
   { page: 'agents',    label: 'Agents',     icon: Bot },
