@@ -876,7 +876,7 @@ pub fn generate_compose_content(image: &str) -> String {
         r#"services:
   gateway:
     image: {}
-    command: ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan", "--port", "8080"]
+    command: ["node", "dist/entry.js", "gateway", "--allow-unconfigured", "--bind", "lan", "--port", "8080"]
     ports:
       - "${{OPENCLAW_BIND_HOST:-127.0.0.1}}:${{OPENCLAW_HTTP_PORT:-8080}}:8080"
     volumes:
@@ -1876,10 +1876,10 @@ mod tests {
     #[test]
     fn test_is_module_not_found() {
         assert!(is_module_not_found(
-            "Error: Cannot find module '/home/node/openclaw.mjs'"
+            "Error: Cannot find module '/home/node/dist/entry.js'"
         ));
         assert!(is_module_not_found(
-            "ENOENT: no such file or directory, open 'openclaw.mjs'"
+            "ENOENT: no such file or directory, open 'dist/entry.js'"
         ));
         assert!(!is_module_not_found("port already in use"));
     }
@@ -1917,7 +1917,7 @@ mod tests {
 
     #[test]
     fn test_build_remediation_module_not_found() {
-        let logs = "Error: Cannot find module '/home/node/openclaw.mjs'";
+        let logs = "Error: Cannot find module '/home/node/dist/entry.js'";
         let compose = PathBuf::from("/tmp/docker-compose.yml");
         let (title, _, steps) = build_remediation(logs, 1, &compose);
         assert_eq!(title, "Gateway App Missing in Image");
