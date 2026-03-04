@@ -4,6 +4,7 @@ use std::sync::{Mutex, OnceLock};
 // use std::process::Command;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
+use crate::secrets::{get_secret_internal, set_secret_internal};
 use crate::state_manager::{
     ensure_gateway_token_for_install, get_app_data_dir, load_state, save_state_internal,
 };
@@ -378,6 +379,162 @@ fn build_console_bootstrap_url(port: u16, base_path: &str, bootstrap_token: &str
     url.to_string()
 }
 
+fn normalize_connection_segment(raw: &str) -> String {
+    let mut normalized = String::new();
+    for ch in raw.trim().chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-') {
+            normalized.push(ch.to_ascii_lowercase());
+        } else {
+            normalized.push('_');
+        }
+    }
+    let trimmed = normalized.trim_matches('_');
+    if trimmed.is_empty() {
+        "unknown".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn connection_secret_key(kind: &str, id: &str, field: &str) -> String {
+    format!(
+        "connections.{}.{}.{}",
+        normalize_connection_segment(kind),
+        normalize_connection_segment(id),
+        normalize_connection_segment(field)
+    )
+}
+
+fn extract_cookie_pair(set_cookie_header: &str) -> Option<String> {
+    let first = set_cookie_header.split(';').next()?.trim();
+    if first.is_empty() || !first.contains('=') {
+        None
+    } else {
+        Some(first.to_string())
+    }
+}
+
+async fn bootstrap_local_session_cookie(
+    port: u16,
+    bootstrap_token: &str,
+) -> Result<String, String> {
+    let bootstrap_url = build_console_bootstrap_url(port, "", bootstrap_token);
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(6))
+        .build()
+        .map_err(|e| format!("Failed to build bootstrap HTTP client: {}", e))?;
+
+    let response = client
+        .get(&bootstrap_url)
+        .send()
+        .await
+        .map_err(|e| format!("Console bootstrap request failed: {}", e))?;
+
+    if !response.status().is_redirection() && !response.status().is_success() {
+        return Err(format!(
+            "Console bootstrap returned HTTP {}",
+            response.status().as_u16()
+        ));
+    }
+
+    let set_cookie = response
+        .headers()
+        .get(reqwest::header::SET_COOKIE)
+        .and_then(|value| value.to_str().ok())
+        .ok_or_else(|| "Console bootstrap did not return a session cookie.".to_string())?;
+    extract_cookie_pair(set_cookie)
+        .ok_or_else(|| "Console bootstrap returned an invalid session cookie.".to_string())
+}
+
+async fn call_gateway_connections_api(
+    app: &AppHandle,
+    method: reqwest::Method,
+    path: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<serde_json::Value, String> {
+    let dir = get_app_data_dir(app)?;
+    let (stable, _diag) = check_gateway_strictly(&dir, false);
+    if !stable {
+        return Err("Gateway is not running. Start the gateway to manage connections.".to_string());
+    }
+    let port = read_http_port(&dir);
+    let bootstrap_token = get_runtime_bootstrap_token()
+        .ok_or_else(|| "Local session bootstrap is unavailable. Restart gateway from desktop.".to_string())?;
+    let cookie = bootstrap_local_session_cookie(port, &bootstrap_token).await?;
+
+    let url = format!("http://127.0.0.1:{}{}", port, path);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| format!("Failed to build connections HTTP client: {}", e))?;
+
+    let mut request = client
+        .request(method, &url)
+        .header(reqwest::header::COOKIE, cookie);
+    if let Some(payload) = body {
+        request = request.json(payload);
+    }
+
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("Connections request failed: {}", e))?;
+    let status = response.status();
+    let text = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read connections response body: {}", e))?;
+    let parsed = serde_json::from_str::<serde_json::Value>(&text)
+        .unwrap_or_else(|_| serde_json::json!({ "message": text }));
+
+    if !status.is_success() {
+        let message = parsed
+            .pointer("/error/message")
+            .and_then(|value| value.as_str())
+            .or_else(|| parsed.get("message").and_then(|value| value.as_str()))
+            .unwrap_or("Connections request failed");
+        return Err(format!("Connections API HTTP {}: {}", status.as_u16(), message));
+    }
+    Ok(parsed)
+}
+
+fn collect_keychain_secret_fields(schema_payload: &serde_json::Value, kind: &str, id: &str) -> Vec<String> {
+    let key = if kind == "provider" { "providers" } else { "channels" };
+    let Some(entries) = schema_payload.get(key).and_then(|value| value.as_array()) else {
+        return vec![];
+    };
+    let Some(item) = entries.iter().find(|entry| {
+        entry
+            .get("id")
+            .and_then(|value| value.as_str())
+            .map(|candidate| candidate.eq_ignore_ascii_case(id))
+            .unwrap_or(false)
+    }) else {
+        return vec![];
+    };
+    let Some(fields) = item
+        .pointer("/schema/fields")
+        .and_then(|value| value.as_array())
+    else {
+        return vec![];
+    };
+    fields
+        .iter()
+        .filter_map(|field| {
+            let field_type = field.get("type").and_then(|value| value.as_str())?;
+            let storage = field.get("storage").and_then(|value| value.as_str()).unwrap_or("memory");
+            if field_type != "secret" || storage != "keychain" {
+                return None;
+            }
+            field
+                .get("key")
+                .and_then(|value| value.as_str())
+                .map(|value| value.to_string())
+        })
+        .collect()
+}
+
 fn empty_capabilities() -> RuntimeCapabilities {
     RuntimeCapabilities {
         version: "v1".to_string(),
@@ -724,13 +881,14 @@ pub fn generate_compose_content(image: &str) -> String {
       - "${{OPENCLAW_BIND_HOST:-127.0.0.1}}:${{OPENCLAW_HTTP_PORT:-8080}}:8080"
     volumes:
       - openclaw_home:/home/node
-    environment:
-      - OPENCLAW_SAFE_MODE=1
-      - LOG_LEVEL=info
-      - OPENCLAW_CONTAINER_PORT=8080
-      - OPENCLAW_GATEWAY_TOKEN=${{OPENCLAW_GATEWAY_TOKEN:-}}
-      - OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN=${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}
-    restart: unless-stopped
+      environment:
+        - OPENCLAW_SAFE_MODE=1
+        - LOG_LEVEL=info
+        - OPENCLAW_CONTAINER_PORT=8080
+        - OPENCLAW_GATEWAY_TOKEN=${{OPENCLAW_GATEWAY_TOKEN:-}}
+        - OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN=${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}
+        - OPENCLAW_ALLOW_INTERNET=${{OPENCLAW_ALLOW_INTERNET:-0}}
+      restart: unless-stopped
 
 networks:
   default:
@@ -871,6 +1029,10 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
         (
             "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN",
             bootstrap_token.as_str(),
+        ),
+        (
+            "OPENCLAW_ALLOW_INTERNET",
+            if state.allow_internet { "1" } else { "0" },
         ),
     ];
     let output =
@@ -1513,6 +1675,141 @@ pub async fn get_runtime_capabilities(app: AppHandle) -> Result<RuntimeCapabilit
     Ok(capabilities)
 }
 
+#[tauri::command]
+pub async fn connections_get_schema(app: AppHandle) -> Result<serde_json::Value, String> {
+    call_gateway_connections_api(&app, reqwest::Method::GET, "/api/v1/connections/schema", None)
+        .await
+}
+
+#[tauri::command]
+pub async fn connections_get_status(app: AppHandle) -> Result<serde_json::Value, String> {
+    call_gateway_connections_api(&app, reqwest::Method::GET, "/api/v1/connections/status", None)
+        .await
+}
+
+#[tauri::command]
+pub async fn connections_configure(
+    app: AppHandle,
+    kind: String,
+    id: String,
+    values: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let kind_normalized = kind.trim().to_ascii_lowercase();
+    if kind_normalized != "channel" && kind_normalized != "provider" {
+        return Err("kind must be channel or provider".to_string());
+    }
+    let id_normalized = id.trim().to_ascii_lowercase();
+    if id_normalized.is_empty() {
+        return Err("id is required".to_string());
+    }
+
+    let schema = call_gateway_connections_api(
+        &app,
+        reqwest::Method::GET,
+        "/api/v1/connections/schema",
+        None,
+    )
+    .await?;
+    let secret_fields = collect_keychain_secret_fields(&schema, &kind_normalized, &id_normalized);
+
+    let mut values_map = match values {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    let mut secret_refs = serde_json::Map::new();
+
+    for field in secret_fields {
+        let secret_key = connection_secret_key(&kind_normalized, &id_normalized, &field);
+        let maybe_value = values_map.remove(&field);
+        let mut has_secret = false;
+        if let Some(serde_json::Value::String(raw_secret)) = maybe_value {
+            let trimmed = raw_secret.trim().to_string();
+            if !trimmed.is_empty() {
+                set_secret_internal(&app, &secret_key, &trimmed)?;
+                has_secret = true;
+            }
+        } else if let Some(value) = maybe_value {
+            values_map.insert(field.clone(), value);
+        }
+        if !has_secret {
+            has_secret = get_secret_internal(&app, &secret_key)
+                .map(|value| !value.trim().is_empty())
+                .unwrap_or(false);
+        }
+        if has_secret {
+            secret_refs.insert(field, serde_json::Value::String(secret_key));
+        }
+    }
+
+    let body = serde_json::json!({
+        "values": serde_json::Value::Object(values_map),
+        "secret_refs": serde_json::Value::Object(secret_refs),
+    });
+    let path = format!(
+        "/api/v1/connections/{}/{}/configure",
+        kind_normalized, id_normalized
+    );
+    call_gateway_connections_api(&app, reqwest::Method::POST, &path, Some(&body)).await
+}
+
+#[tauri::command]
+pub async fn connections_test(
+    app: AppHandle,
+    kind: String,
+    id: String,
+    values: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let kind_normalized = kind.trim().to_ascii_lowercase();
+    if kind_normalized != "channel" && kind_normalized != "provider" {
+        return Err("kind must be channel or provider".to_string());
+    }
+    let id_normalized = id.trim().to_ascii_lowercase();
+    if id_normalized.is_empty() {
+        return Err("id is required".to_string());
+    }
+
+    let schema = call_gateway_connections_api(
+        &app,
+        reqwest::Method::GET,
+        "/api/v1/connections/schema",
+        None,
+    )
+    .await?;
+    let secret_fields = collect_keychain_secret_fields(&schema, &kind_normalized, &id_normalized);
+
+    let mut values_map = match values {
+        serde_json::Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+
+    for field in secret_fields {
+        let secret_key = connection_secret_key(&kind_normalized, &id_normalized, &field);
+        let needs_lookup = match values_map.get(&field) {
+            Some(serde_json::Value::String(raw)) => raw.trim().is_empty(),
+            Some(_) => false,
+            None => true,
+        };
+        if needs_lookup {
+            if let Some(secret_value) = get_secret_internal(&app, &secret_key) {
+                if !secret_value.trim().is_empty() {
+                    values_map.insert(field.clone(), serde_json::Value::String(secret_value));
+                }
+            }
+        } else if let Some(serde_json::Value::String(raw_secret)) = values_map.get(&field) {
+            let trimmed = raw_secret.trim().to_string();
+            if !trimmed.is_empty() {
+                let _ = set_secret_internal(&app, &secret_key, &trimmed);
+            }
+        }
+    }
+
+    let body = serde_json::json!({
+        "values": serde_json::Value::Object(values_map),
+    });
+    let path = format!("/api/v1/connections/{}/{}/test", kind_normalized, id_normalized);
+    call_gateway_connections_api(&app, reqwest::Method::POST, &path, Some(&body)).await
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1681,6 +1978,10 @@ mod tests {
                 "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN=${OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}"
             ),
             "Compose must forward OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN at runtime"
+        );
+        assert!(
+            content.contains("OPENCLAW_ALLOW_INTERNET=${OPENCLAW_ALLOW_INTERNET:-0}"),
+            "Compose must forward OPENCLAW_ALLOW_INTERNET policy flag"
         );
     }
 

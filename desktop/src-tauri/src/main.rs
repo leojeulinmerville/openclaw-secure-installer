@@ -45,6 +45,10 @@ fn main() {
         gateway::get_console_info,
         gateway::open_console_window,
         gateway::get_runtime_capabilities,
+        gateway::connections_get_schema,
+        gateway::connections_get_status,
+        gateway::connections_configure,
+        gateway::connections_test,
         // Agent lifecycle
         agents::create_agent,
         agents::list_agents,
