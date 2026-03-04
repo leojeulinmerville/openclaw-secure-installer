@@ -17,6 +17,10 @@ import type {
   ChatResponse,
   ConsoleInfo,
   RuntimeCapabilities,
+  ConnectionsSchemaResponse,
+  ConnectionsStatusResponse,
+  ConnectionKind,
+  ConnectionOperationResult,
 } from '../types';
 
 // ── Docker ──────────────────────────────────────────────────────────
@@ -49,6 +53,18 @@ export const getGatewayStatus = () => invoke<GatewayStatusResult>('get_gateway_s
 export const getConsoleInfo = () => invoke<ConsoleInfo>('get_console_info');
 export const openConsoleWindow = () => invoke<void>('open_console_window');
 export const getRuntimeCapabilities = () => invoke<RuntimeCapabilities>('get_runtime_capabilities');
+export const connectionsGetSchema = () => invoke<ConnectionsSchemaResponse>('connections_get_schema');
+export const connectionsGetStatus = () => invoke<ConnectionsStatusResponse>('connections_get_status');
+export const connectionsConfigure = (
+  kind: ConnectionKind,
+  id: string,
+  values: Record<string, unknown>,
+) => invoke<ConnectionOperationResult>('connections_configure', { kind, id, values });
+export const connectionsTest = (
+  kind: ConnectionKind,
+  id: string,
+  values: Record<string, unknown>,
+) => invoke<ConnectionOperationResult>('connections_test', { kind, id, values });
 
 // ── Internet toggle ─────────────────────────────────────────────────
 export const getAllowInternet = () => invoke<boolean>('get_allow_internet');

@@ -137,6 +137,87 @@ export interface RuntimeCapabilities {
   orchestrators: CapabilityOrchestrator[];
 }
 
+export type ConnectionKind = 'channel' | 'provider';
+export type ConnectionFieldType = 'string' | 'secret' | 'enum' | 'number' | 'boolean';
+export type ConnectionSecretStorage = 'keychain' | 'gateway_encrypted' | 'memory';
+
+export interface ConnectionSchemaField {
+  key: string;
+  display_name: string;
+  type: ConnectionFieldType;
+  required: boolean;
+  optional: boolean;
+  regex?: string;
+  enum?: string[];
+  help_text?: string;
+  storage?: ConnectionSecretStorage;
+}
+
+export interface ConnectionSchemaDescriptor {
+  type: 'object';
+  fields: ConnectionSchemaField[];
+}
+
+export interface ConnectionTestCapabilities {
+  can_test: boolean;
+  requires_network: boolean;
+  blocked_by_policy: boolean;
+  pairing_supported?: boolean;
+}
+
+export interface ChannelConnectionSchemaItem {
+  id: string;
+  display_name: string;
+  requires_pairing: boolean;
+  schema: ConnectionSchemaDescriptor;
+  test_capabilities: ConnectionTestCapabilities;
+}
+
+export interface ProviderConnectionSchemaItem {
+  id: string;
+  display_name: string;
+  schema: ConnectionSchemaDescriptor;
+  test_capabilities: ConnectionTestCapabilities;
+}
+
+export interface ConnectionsSchemaResponse {
+  version: string;
+  generated_at: string;
+  safe_mode: boolean;
+  channels: ChannelConnectionSchemaItem[];
+  providers: ProviderConnectionSchemaItem[];
+}
+
+export interface ConnectionStatusItem {
+  kind: ConnectionKind;
+  id: string;
+  display_name: string;
+  configured: boolean;
+  healthy: boolean;
+  last_test: string | null;
+  errors: string[];
+  requires_pairing?: boolean;
+  pair_supported?: boolean;
+}
+
+export interface ConnectionsStatusResponse {
+  version: string;
+  generated_at: string;
+  safe_mode: boolean;
+  channels: ConnectionStatusItem[];
+  providers: ConnectionStatusItem[];
+}
+
+export interface ConnectionOperationResult {
+  ok: boolean;
+  kind: ConnectionKind;
+  id: string;
+  configured?: boolean;
+  message: string;
+  details?: Record<string, unknown>;
+  status?: ConnectionStatusItem | null;
+}
+
 export interface GatewayAgent {
   name: string;
   provider: string;
@@ -311,6 +392,7 @@ export interface Artifact {
 export type Page =
   | 'overview'
   | 'console'
+  | 'connections'
   | 'providers'
   | 'agents'
   | 'agent-detail'

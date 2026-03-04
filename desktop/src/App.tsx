@@ -16,6 +16,7 @@ import { CreateRun } from './pages/CreateRun';
 import { Setup } from './pages/Setup';
 import { ConnectOllama } from './pages/ConnectOllama';
 import { Console } from './pages/Console';
+import { Connections } from './pages/Connections';
 import { PageErrorBoundary } from './components/layout/PageErrorBoundary';
 import { GatewayBanner } from './components/GatewayBanner';
 import { DesktopProvider, useDesktop } from './contexts/DesktopContext';
@@ -37,6 +38,7 @@ function AppContent() {
     switch (currentPage) {
       case 'overview':      return <Overview />;
       case 'console':       return <Console />;
+      case 'connections':   return <Connections />;
       case 'providers':     return <Providers />;
       case 'agents':        return <AgentsList onNavigate={navigate} />;
       case 'create-agent':  return <CreateAgent onNavigate={navigate} />;
