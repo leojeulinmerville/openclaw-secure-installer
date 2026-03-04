@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 // use std::process::Command;
 use tauri::AppHandle;
@@ -14,6 +14,9 @@ const SENSITIVE_KEYS: &[&str] = &[
     "SLACK_BOT_TOKEN",
     "STRIPE_SECRET_KEY",
 ];
+
+const DEFAULT_HTTP_PORT: u16 = 8080;
+const DEFAULT_CONTROL_UI_BASE_PATH: &str = "/openclaw";
 
 pub(crate) fn sanitize_output(text: &str) -> String {
     let mut lines = Vec::new();
@@ -110,6 +113,57 @@ pub struct GatewayStatusResult {
     pub last_error: Option<GatewayError>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct ConsoleInfo {
+    pub url: String,
+    pub port: u16,
+    pub base_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct CapabilityChannel {
+    pub id: String,
+    pub display_name: String,
+    pub requires_pairing: bool,
+    pub requires_api_key: bool,
+    pub status: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct CapabilityTool {
+    pub id: String,
+    pub display_name: String,
+    pub scope: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct CapabilityOrchestrator {
+    pub id: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct ControlUiCapability {
+    pub base_path: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "snake_case")]
+pub struct RuntimeCapabilities {
+    pub version: String,
+    pub generated_at: String,
+    pub safe_mode: bool,
+    pub control_ui: ControlUiCapability,
+    pub channels: Vec<CapabilityChannel>,
+    pub tools: Vec<CapabilityTool>,
+    pub orchestrators: Vec<CapabilityOrchestrator>,
+}
+
 // ── Container health (docker inspect) ───────────────────────────────
 
 /// Parsed container state from `docker inspect`.
@@ -200,7 +254,71 @@ fn read_http_port(dir: &Path) -> u16 {
             }
         }
     }
-    80 // default
+    DEFAULT_HTTP_PORT
+}
+
+fn normalize_base_path(raw: &str) -> String {
+    let mut value = raw.trim().to_string();
+    if value.is_empty() {
+        return String::new();
+    }
+    if !value.starts_with('/') {
+        value.insert(0, '/');
+    }
+    while value.len() > 1 && value.ends_with('/') {
+        value.pop();
+    }
+    if value == "/" {
+        String::new()
+    } else {
+        value
+    }
+}
+
+fn build_console_url(port: u16, base_path: &str) -> String {
+    let normalized = normalize_base_path(base_path);
+    if normalized.is_empty() {
+        format!("http://127.0.0.1:{}/", port)
+    } else {
+        format!("http://127.0.0.1:{}{}/", port, normalized)
+    }
+}
+
+fn empty_capabilities() -> RuntimeCapabilities {
+    RuntimeCapabilities {
+        version: "v1".to_string(),
+        generated_at: chrono::Utc::now().to_rfc3339(),
+        safe_mode: true,
+        control_ui: ControlUiCapability {
+            base_path: DEFAULT_CONTROL_UI_BASE_PATH.to_string(),
+        },
+        channels: vec![],
+        tools: vec![],
+        orchestrators: vec![],
+    }
+}
+
+async fn fetch_gateway_capabilities(port: u16) -> Result<RuntimeCapabilities, String> {
+    let url = format!("http://127.0.0.1:{}/api/v1/capabilities", port);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(4))
+        .build()
+        .map_err(|e| format!("Failed to build capabilities HTTP client: {}", e))?;
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Capabilities request failed: {}", e))?;
+    if !response.status().is_success() {
+        return Err(format!(
+            "Capabilities request returned HTTP {}",
+            response.status().as_u16()
+        ));
+    }
+    response
+        .json::<RuntimeCapabilities>()
+        .await
+        .map_err(|e| format!("Capabilities response parse failed: {}", e))
 }
 
 /// Probe the gateway /health endpoint via raw HTTP over TCP.
@@ -1002,6 +1120,61 @@ pub async fn get_gateway_status(app: AppHandle) -> Result<GatewayStatusResult, S
     })
 }
 
+#[tauri::command]
+pub async fn get_console_info(app: AppHandle) -> Result<ConsoleInfo, String> {
+    let dir = get_app_data_dir(&app)?;
+    let port = read_http_port(&dir);
+    let capabilities = fetch_gateway_capabilities(port).await.ok();
+    let resolved = capabilities
+        .as_ref()
+        .map(|entry| normalize_base_path(&entry.control_ui.base_path))
+        .unwrap_or_else(|| normalize_base_path(DEFAULT_CONTROL_UI_BASE_PATH));
+    let base_path = if resolved.is_empty() {
+        normalize_base_path(DEFAULT_CONTROL_UI_BASE_PATH)
+    } else {
+        resolved
+    };
+    Ok(ConsoleInfo {
+        url: build_console_url(port, &base_path),
+        port,
+        base_path,
+    })
+}
+
+#[tauri::command]
+pub async fn get_runtime_capabilities(app: AppHandle) -> Result<RuntimeCapabilities, String> {
+    let dir = get_app_data_dir(&app)?;
+    let (stable, _) = check_gateway_strictly(&dir, false);
+    if !stable {
+        return Ok(empty_capabilities());
+    }
+
+    let port = read_http_port(&dir);
+    let mut capabilities = fetch_gateway_capabilities(port)
+        .await
+        .unwrap_or_else(|_| empty_capabilities());
+
+    capabilities.control_ui.base_path = {
+        let normalized = normalize_base_path(&capabilities.control_ui.base_path);
+        if normalized.is_empty() {
+            normalize_base_path(DEFAULT_CONTROL_UI_BASE_PATH)
+        } else {
+            normalized
+        }
+    };
+
+    let state = load_state(&app);
+    if !state.allow_internet {
+        for tool in capabilities.tools.iter_mut() {
+            if tool.scope == "network" {
+                tool.scope = "network_blocked".to_string();
+            }
+        }
+    }
+
+    Ok(capabilities)
+}
+
 // ── Tests ───────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1159,12 +1332,12 @@ mod tests {
     }
 
     #[test]
-    fn test_read_http_port_defaults_to_80() {
+    fn test_read_http_port_defaults_to_8080() {
         let tmp = std::env::temp_dir().join("test_port_default");
         let _ = std::fs::create_dir_all(&tmp);
-        // No .env file → should default to 80
+        // No .env file -> should default to 8080.
         let _ = std::fs::remove_file(tmp.join(".env"));
-        assert_eq!(read_http_port(&tmp), 80);
+        assert_eq!(read_http_port(&tmp), 8080);
     }
 
     #[test]
@@ -1173,6 +1346,26 @@ mod tests {
         let _ = std::fs::create_dir_all(&tmp);
         std::fs::write(tmp.join(".env"), "OPENCLAW_HTTP_PORT=9090\nLOG_LEVEL=info\n").unwrap();
         assert_eq!(read_http_port(&tmp), 9090);
+    }
+
+    #[test]
+    fn test_build_console_url_uses_configured_port_and_base_path() {
+        assert_eq!(
+            build_console_url(9090, "/openclaw"),
+            "http://127.0.0.1:9090/openclaw/"
+        );
+        assert_eq!(build_console_url(8080, "/"), "http://127.0.0.1:8080/");
+    }
+
+    #[test]
+    fn test_empty_capabilities_is_safe_structure() {
+        let payload = empty_capabilities();
+        assert_eq!(payload.version, "v1");
+        assert!(payload.safe_mode);
+        assert!(payload.channels.is_empty());
+        assert!(payload.tools.is_empty());
+        assert!(payload.orchestrators.is_empty());
+        assert_eq!(payload.control_ui.base_path, "/openclaw");
     }
 
     // -- is_healthy --

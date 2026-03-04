@@ -42,6 +42,8 @@ fn main() {
         gateway::test_gateway_ollama_access,
         gateway::build_local_image,
         gateway::get_gateway_status,
+        gateway::get_console_info,
+        gateway::get_runtime_capabilities,
         // Agent lifecycle
         agents::create_agent,
         agents::list_agents,
