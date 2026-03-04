@@ -103,6 +103,9 @@ export const chatSend = (request: ChatRequest) =>
 export const testOllamaConnection = (endpoint?: string) =>
   invoke<boolean>('test_ollama_connection', { endpoint });
 
+export const testGatewayOllamaAccess = () =>
+  invoke<boolean>('test_gateway_ollama_access');
+
 // ── Runs ────────────────────────────────────────────────────────────
 import type { Run, RunEvent } from '../types';
 

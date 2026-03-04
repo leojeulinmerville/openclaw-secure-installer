@@ -787,6 +787,26 @@ pub async fn check_gateway_health(app: AppHandle) -> Result<HealthCheckResult, S
 }
 
 #[tauri::command]
+pub async fn test_gateway_ollama_access(app: AppHandle) -> Result<bool, String> {
+    let dir = get_app_data_dir(&app)?;
+
+    let (stable, _diag) = check_gateway_strictly(&dir, false);
+    if !stable {
+        return Ok(false);
+    }
+
+    const PROBE_SCRIPT: &str = r#"const url='http://host.docker.internal:11434/api/tags';const ac=new AbortController();const t=setTimeout(()=>ac.abort(),5000);fetch(url,{signal:ac.signal}).then((res)=>{clearTimeout(t);process.exit(res.ok?0:2);}).catch(()=>{clearTimeout(t);process.exit(3);});"#;
+
+    let output = crate::process::run_docker(
+        &["compose", "exec", "-T", "gateway", "node", "-e", PROBE_SCRIPT],
+        Some(&dir),
+    )
+    .map_err(|e| format!("Failed to execute docker compose exec: {}", e))?;
+
+    Ok(output.success())
+}
+
+#[tauri::command]
 pub async fn build_local_image(context_path: String) -> Result<BuildResult, String> {
     let context = std::path::Path::new(&context_path);
     if !context.join("Dockerfile").exists() {

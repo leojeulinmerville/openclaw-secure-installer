@@ -835,11 +835,7 @@ describe("security audit", () => {
 
     const includePath = path.join(stateDir, "extra.json5");
     await fs.writeFile(includePath, "{ logging: { redactSensitive: 'off' } }\n", "utf-8");
-    if (isWindows) {
-      // Grant "Everyone" write access to trigger the perms_writable check on Windows
-      const { execSync } = await import("node:child_process");
-      execSync(`icacls "${includePath}" /grant Everyone:W`, { stdio: "ignore" });
-    } else {
+    if (!isWindows) {
       await fs.chmod(includePath, 0o644);
     }
 

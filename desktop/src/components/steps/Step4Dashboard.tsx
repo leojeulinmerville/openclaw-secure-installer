@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { GlassCard } from '../GlassCard';
 import { StatusPill } from '../StatusPill';
 import { GatewayStartResult, HealthCheckResult } from '../../types';
+import { getState } from '../../lib/tauri';
 import { Activity, ExternalLink, FileText, FolderOpen, Power, RefreshCw } from 'lucide-react';
 
 interface Step4Props {
@@ -16,6 +17,7 @@ export function Step4Dashboard({ startResult, onStop }: Step4Props) {
   const [runtimeLogs, setRuntimeLogs] = useState("");
   const [showLogs, setShowLogs] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [dashboardUrl, setDashboardUrl] = useState("http://localhost");
 
   const checkHealth = async () => {
     setChecking(true);
@@ -51,10 +53,24 @@ export function Step4Dashboard({ startResult, onStop }: Step4Props) {
     }
   };
 
+  const resolveDashboardUrl = async () => {
+    try {
+      const state = await getState();
+      const port = typeof state.http_port === "number" ? state.http_port : 80;
+      const url = port === 80 ? "http://localhost" : `http://localhost:${port}`;
+      setDashboardUrl(url);
+    } catch {
+      setDashboardUrl("http://localhost:8080");
+    }
+  };
+
   // Initial health check
   useEffect(() => {
-    checkHealth();
-    const interval = setInterval(checkHealth, 30000);
+    void checkHealth();
+    void resolveDashboardUrl();
+    const interval = setInterval(() => {
+      void checkHealth();
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -108,8 +124,9 @@ export function Step4Dashboard({ startResult, onStop }: Step4Props) {
         
         {/* Open Browser Big Button */}
         <a 
-          href={`http://localhost:${80}`} // TODO: Get actual port from config
+          href={dashboardUrl}
           target="_blank"
+          rel="noreferrer"
           className="block w-full py-4 bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 text-cyan-100 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg text-center no-underline"
         >
           <ExternalLink className="w-5 h-5"/> Open in Browser

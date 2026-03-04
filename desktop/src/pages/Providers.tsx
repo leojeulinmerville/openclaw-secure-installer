@@ -1,8 +1,22 @@
 import { useState, useEffect } from 'react';
-import { invoke, setSecret, hasSecret, deleteSecret } from '../lib/tauri';
+import {
+  invoke,
+  setSecret,
+  hasSecret,
+  deleteSecret,
+  testOllamaConnection,
+  testGatewayOllamaAccess,
+} from '../lib/tauri';
 import {
   Key, Eye, EyeOff, Check, Trash2, TestTube, Server, Loader2
 } from 'lucide-react';
+
+function toErrorMessage(err: unknown): string {
+  if (err instanceof Error) {
+    return err.message;
+  }
+  return String(err);
+}
 
 export function Providers() {
   // ── OpenAI state ──────────────────────────────────────────────────
@@ -194,50 +208,36 @@ function OllamaWizard() {
     setLoading(true);
     setErrorMsg('');
     setStep(2);
+    setLocalOk(false);
+    setGatewayOk(false);
 
     try {
       // Step 2: Check Localhost directly (from Tauri/browser side)
-      // We'll try to fetch localhost:11434 from the browser/tauri context
-      try {
-        const resp = await fetch('http://localhost:11434/api/tags');
-        if (resp.ok) {
-          setLocalOk(true);
-        } else {
-          throw new Error('Localhost reachable but returned error');
-        }
-      } catch (e) {
+      const localReachable = await testOllamaConnection('http://localhost:11434');
+      if (!localReachable) {
         setLocalOk(false);
-        setStep(2); // Stay on step 2 failure
+        setErrorMsg('Could not reach Ollama at http://localhost:11434.');
+        setLoading(false);
+        return;
+      }
+      setLocalOk(true);
+
+      setStep(3);
+      const gatewayReachable = await testGatewayOllamaAccess();
+      if (!gatewayReachable) {
+        setGatewayOk(false);
+        setErrorMsg(
+          'Gateway container could not reach Ollama at http://host.docker.internal:11434.'
+        );
         setLoading(false);
         return;
       }
 
-      setStep(3);
-
-      // Step 3: Check from Gateway (via backend proxy/test)
-      // You'll need a backend command for this, or reuse testOllama connection
-      // For now, let's assume we use the existing specific test endpoint or generic fetch
-      // We will try to reach it via the gateway's perspective (host.docker.internal)
-      
-      // Note: We don't have a direct "test from gateway" function exposed yet that returns distinct status
-      // We will use a simulated check or the improved testOllamaConnection if available
-      // For now, let's just use the existing logic but frame it as "Gateway Connection"
-      
-      // TODO: Actual Gateway-side check implementation
-      // For MVP v0.1.8, we might just re-verify the "host.docker.internal" connectivity
-      // via `test_ollama_connection` backend command if it existed, or just fetch via gateway proxy if we had one.
-      // Wait, `testOllamaConnection` exists in lib/tauri.ts calling `test_ollama_connection`.
-      // Let's assume that checks from backend (Rust) -> Ollama.
-      // But we need checks from Gateway Container -> Ollama.
-      
-      // Current compromise: We will trust `host.docker.internal` works if localhost works, 
-      // but warn user about env vars.
-      
-      setGatewayOk(true); 
+      setGatewayOk(true);
       setStep(4);
-      
+
     } catch (e) {
-      setErrorMsg(String(e));
+      setErrorMsg(toErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -304,6 +304,20 @@ function OllamaWizard() {
                     <ul className="list-disc pl-4 space-y-1 text-xs">
                       <li>Is Ollama running? (Try `ollama serve` in terminal)</li>
                       <li>Is it blocked by firewall?</li>
+                    </ul>
+                    <button onClick={runChecks} className="glass-button w-full mt-2">Retry</button>
+                  </div>
+                )}
+
+                {!loading && step === 3 && !gatewayOk && (
+                  <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-lg text-sm text-white/80 space-y-3 animate-in slide-in-from-top-2">
+                    <p className="font-bold text-red-300">
+                      Gateway cannot access Ollama via host.docker.internal:11434
+                    </p>
+                    {errorMsg && <p className="text-xs font-mono text-red-300/70">{errorMsg}</p>}
+                    <ul className="list-disc pl-4 space-y-1 text-xs">
+                      <li>Keep Ollama running and reachable from Docker.</li>
+                      <li>Ensure Ollama is bound to 0.0.0.0 (not localhost-only).</li>
                     </ul>
                     <button onClick={runChecks} className="glass-button w-full mt-2">Retry</button>
                   </div>

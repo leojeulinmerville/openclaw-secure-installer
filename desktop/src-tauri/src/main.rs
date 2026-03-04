@@ -39,6 +39,7 @@ fn main() {
         gateway::open_app_data_folder,
         gateway::docker_smoke_test,
         gateway::check_gateway_health,
+        gateway::test_gateway_ollama_access,
         gateway::build_local_image,
         gateway::get_gateway_status,
         // Agent lifecycle
