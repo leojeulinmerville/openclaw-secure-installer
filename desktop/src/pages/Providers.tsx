@@ -213,10 +213,10 @@ function OllamaWizard() {
 
     try {
       // Step 2: Check Localhost directly (from Tauri/browser side)
-      const localReachable = await testOllamaConnection('http://localhost:11434');
+      const localReachable = await testOllamaConnection('http://127.0.0.1:11434');
       if (!localReachable) {
         setLocalOk(false);
-        setErrorMsg('Could not reach Ollama at http://localhost:11434.');
+        setErrorMsg('Could not reach Ollama at http://127.0.0.1:11434.');
         setLoading(false);
         return;
       }
@@ -227,7 +227,7 @@ function OllamaWizard() {
       if (!gatewayReachable) {
         setGatewayOk(false);
         setErrorMsg(
-          'Gateway container could not reach Ollama at http://host.docker.internal:11434.'
+          'Gateway container could not reach Ollama at http://127.0.0.1:11434.'
         );
         setLoading(false);
         return;
@@ -264,7 +264,7 @@ function OllamaWizard() {
                  <p className="font-bold text-white">Prerequisites:</p>
                  <ul className="list-disc pl-4 space-y-1">
                    <li>Ollama must be installed and running.</li>
-                   <li>Ollama must allow external connections (OLLAMA_ORIGINS="*").</li>
+                   <li>Ollama must allow local connections.</li>
                  </ul>
                </div>
                <button onClick={() => (window as any).navigate('connect-ollama')} className="glass-button-accent w-full">
@@ -299,7 +299,7 @@ function OllamaWizard() {
                 {/* Failure Guide */}
                 {!loading && step === 2 && !localOk && (
                   <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-lg text-sm text-white/80 space-y-3 animate-in slide-in-from-top-2">
-                    <p className="font-bold text-red-300">Could not reach Ollama on localhost:11434</p>
+                    <p className="font-bold text-red-300">Could not reach Ollama on 127.0.0.1:11434</p>
                     {errorMsg && <p className="text-xs font-mono text-red-300/70">{errorMsg}</p>}
                     <ul className="list-disc pl-4 space-y-1 text-xs">
                       <li>Is Ollama running? (Try `ollama serve` in terminal)</li>
@@ -312,7 +312,7 @@ function OllamaWizard() {
                 {!loading && step === 3 && !gatewayOk && (
                   <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-lg text-sm text-white/80 space-y-3 animate-in slide-in-from-top-2">
                     <p className="font-bold text-red-300">
-                      Gateway cannot access Ollama via host.docker.internal:11434
+                      Gateway cannot access Ollama via 127.0.0.1:11434
                     </p>
                     {errorMsg && <p className="text-xs font-mono text-red-300/70">{errorMsg}</p>}
                     <ul className="list-disc pl-4 space-y-1 text-xs">

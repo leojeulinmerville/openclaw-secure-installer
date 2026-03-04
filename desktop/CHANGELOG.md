@@ -1,6 +1,14 @@
 # Changelog
 
-## v0.2.0 - 2026-03-02
+## v0.2.1 - 2026-03-04
+
+### Security & UX
+- **Address Normalization**: Forced `127.0.0.1` instead of `localhost` in Ollama API base to prevent Windows IPv6 resolution issues.
+- **Insecurity Removal**: Removed instructions to set `OLLAMA_ORIGINS="*"`. Frontend-to-backend proxying handles this securely.
+- **Address Cleanup**: Removed all `host.docker.internal` references in favor of explicit `127.0.0.1`.
+
+### CI/CD
+- **Build Stability**: Set `CARGO_BUILD_JOBS: 1` in Windows build workflow to prevent `Peer disconnected` OOM crashes on GitHub Actions runners.
 
 ### Features
 - **Live Run Timeline**: Run events stream in real-time via Tauri events — no polling freeze.

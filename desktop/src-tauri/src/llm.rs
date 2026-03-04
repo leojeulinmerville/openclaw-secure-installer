@@ -212,7 +212,7 @@ impl LlmClient {
             Ok((content, response.usage))
 
         } else if self.provider == "ollama" {
-            let base = self.api_base.clone().unwrap_or_else(|| "http://localhost:11434".to_string());
+            let base = self.api_base.clone().unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
             let url = format!("{}/api/chat", base); // Ollama chat endpoint
             
             // Ollama request format is similar but check docs

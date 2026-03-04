@@ -17,7 +17,7 @@ jobs:
     # Limit parallelism to prevent "Peer disconnected" OOM crashes on Windows runner
     env:
       RUSTFLAGS: "-C codegen-units=1"
-      CARGO_BUILD_JOBS: "2"
+      CARGO_BUILD_JOBS: "1"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
