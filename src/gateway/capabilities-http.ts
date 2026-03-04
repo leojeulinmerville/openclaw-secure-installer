@@ -6,8 +6,12 @@ import { resolveChannelDefaultAccountId } from "../channels/plugins/helpers.js";
 import { listChannelPlugins } from "../channels/plugins/index.js";
 import { loadConfig } from "../config/config.js";
 import { resolveMainSessionKey } from "../config/sessions.js";
+import {
+  resolveControlUiRootOverrideSync,
+  resolveControlUiRootSync,
+} from "../infra/control-ui-assets.js";
 import { isSafeMode } from "../infra/safe-mode.js";
-import { normalizeControlUiBasePath } from "./control-ui-shared.js";
+import { resolveControlUiBasePath } from "./control-ui-shared.js";
 import {
   sendJson,
   sendMethodNotAllowed,
@@ -185,6 +189,31 @@ function buildOrchestrators(): OrchestratorCapability[] {
     }));
 }
 
+function resolveCapabilitiesControlUiBasePath(cfg: ReturnType<typeof loadConfig>): string {
+  const controlUiEnabled = cfg.gateway?.controlUi?.enabled !== false;
+  if (!controlUiEnabled) {
+    return "";
+  }
+
+  const configuredBasePath = resolveControlUiBasePath(cfg.gateway?.controlUi?.basePath);
+  const rootOverrideRaw = cfg.gateway?.controlUi?.root;
+  const rootOverride =
+    typeof rootOverrideRaw === "string" && rootOverrideRaw.trim().length > 0
+      ? rootOverrideRaw.trim()
+      : undefined;
+
+  if (rootOverride) {
+    return resolveControlUiRootOverrideSync(rootOverride) ? configuredBasePath : "";
+  }
+
+  const resolvedRoot = resolveControlUiRootSync({
+    moduleUrl: import.meta.url,
+    argv1: process.argv[1],
+    cwd: process.cwd(),
+  });
+  return resolvedRoot ? configuredBasePath : "";
+}
+
 async function canReadCapabilities(params: {
   req: IncomingMessage;
   auth: ResolvedGatewayAuth;
@@ -229,7 +258,7 @@ export async function handleGatewayCapabilitiesHttpRequest(
     generated_at: new Date().toISOString(),
     safe_mode: isSafeMode(),
     control_ui: {
-      base_path: normalizeControlUiBasePath(cfg.gateway?.controlUi?.basePath),
+      base_path: resolveCapabilitiesControlUiBasePath(cfg),
     },
     channels: await buildChannels(),
     tools: buildTools(),

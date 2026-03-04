@@ -45,6 +45,7 @@ import { handleOpenAiHttpRequest } from "./openai-http.js";
 import { handleOpenResponsesHttpRequest } from "./openresponses-http.js";
 import { handleToolsInvokeHttpRequest } from "./tools-invoke-http.js";
 import { handleGatewayCapabilitiesHttpRequest } from "./capabilities-http.js";
+import { isSafeMode } from "../infra/safe-mode.js";
 
 type SubsystemLogger = ReturnType<typeof createSubsystemLogger>;
 
@@ -64,6 +65,8 @@ type HookDispatchers = {
     allowUnsafeExternalContent?: boolean;
   }) => string;
 };
+
+const GATEWAY_HTTP_START_TIME_MS = Date.now();
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.statusCode = status;
@@ -315,6 +318,16 @@ export function createGatewayHttpServer(opts: {
       return;
     }
 
+    const url = new URL(req.url ?? "/", "http://localhost");
+    if ((url.pathname === "/health" || url.pathname === "/api/v1/health") && req.method === "GET") {
+      sendJson(res, 200, {
+        status: "healthy",
+        uptime_ms: Math.max(0, Date.now() - GATEWAY_HTTP_START_TIME_MS),
+        safe_mode: isSafeMode(),
+      });
+      return;
+    }
+
     try {
       const configSnapshot = loadConfig();
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
@@ -365,7 +378,6 @@ export function createGatewayHttpServer(opts: {
         }
       }
       if (canvasHost) {
-        const url = new URL(req.url ?? "/", "http://localhost");
         if (isCanvasPath(url.pathname)) {
           const ok = await authorizeCanvasRequest({
             req,

@@ -81,7 +81,8 @@ This starts the Vite dev server and the Tauri shell.
   - build output: `dist/control-ui/` (served by gateway HTTP server)
 - URL resolution is dynamic and uses:
   - configured gateway port from installer state (`OPENCLAW_HTTP_PORT`, default `8080`)
-  - Control UI base path from gateway capabilities (`/api/v1/capabilities`, default root `/`)
+  - Control UI base path from gateway capabilities (`/api/v1/capabilities`, default `/openclaw` when UI assets are present)
+  - If UI assets are missing, capabilities returns `control_ui.base_path=""` (safe empty)
   - Control UI auto-probe fallback candidates when capability path is missing/non-HTML: `/`, `/openclaw/`, `/ui/`, `/console/`, `/app/`
 - Effective in-app URL format:
   - `http://127.0.0.1:<port><base_path>/`
@@ -91,6 +92,9 @@ This starts the Vite dev server and the Tauri shell.
 ### Gateway binding defaults
 - Gateway port publish is localhost-only by default:
   - compose mapping uses `OPENCLAW_BIND_HOST` with default `127.0.0.1`
+- Desktop writes a per-install local gateway auth token in `.env`:
+  - `OPENCLAW_GATEWAY_TOKEN=desktop-<install_id>`
+  - used by upstream gateway auth while container bind mode stays `lan`
 - Installer includes an explicit advanced toggle:
   - **Expose gateway to LAN**
   - enabled = `OPENCLAW_BIND_HOST=0.0.0.0`
@@ -148,7 +152,8 @@ Bundle output is placed under `desktop/src-tauri/target/release/bundle`.
 - If Console is blank:
   - confirm gateway is running and healthy (`check_gateway_health`)
   - confirm configured HTTP port is reachable (`http://127.0.0.1:<port>/health`)
-  - confirm gateway root is reachable (`http://127.0.0.1:<port>/`)
+  - confirm Control UI route is reachable (`http://127.0.0.1:<port>/openclaw/`)
+  - confirm capabilities reports base path (`http://127.0.0.1:<port>/api/v1/capabilities`)
   - if Console diagnostic says no HTML route found, this gateway image does not bundle Control UI
   - rebuild/update gateway image with Control UI or run a separate control-ui service
   - use **Open In-App Window** to refocus/reopen the dedicated Console window

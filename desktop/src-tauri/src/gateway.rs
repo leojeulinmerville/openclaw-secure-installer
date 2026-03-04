@@ -657,7 +657,7 @@ pub fn generate_compose_content(image: &str) -> String {
         r#"services:
   gateway:
     image: {}
-    command: ["node", "openclaw.mjs", "gateway"]
+    command: ["node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--bind", "lan", "--port", "8080"]
     ports:
       - "${{OPENCLAW_BIND_HOST:-127.0.0.1}}:${{OPENCLAW_HTTP_PORT:-8080}}:8080"
     volumes:

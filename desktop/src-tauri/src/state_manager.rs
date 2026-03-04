@@ -159,18 +159,20 @@ pub async fn configure_installation(
   expose_gateway_to_lan: Option<bool>,
 ) -> Result<(), String> {
   let dir = get_app_data_dir(&app)?;
+  let current_state = load_state(&app);
 
   let image = gateway_image.unwrap_or_else(|| DEFAULT_GATEWAY_IMAGE.to_string());
   let expose_lan = expose_gateway_to_lan.unwrap_or(false);
   let bind_host = if expose_lan { "0.0.0.0" } else { "127.0.0.1" };
+  let gateway_token = format!("desktop-{}", current_state.install_id);
 
   // Track whether user chose privileged ports explicitly.
   let advanced = http_port == 80 || http_port == 443 || https_port == 80 || https_port == 443;
 
   // Write .env
   let env_content = format!(
-    "OPENCLAW_HTTP_PORT={}\nOPENCLAW_HTTPS_PORT={}\nOPENCLAW_BIND_HOST={}\nOPENCLAW_SAFE_MODE=1\nLOG_LEVEL=info\n",
-    http_port, https_port, bind_host
+    "OPENCLAW_HTTP_PORT={}\nOPENCLAW_HTTPS_PORT={}\nOPENCLAW_BIND_HOST={}\nOPENCLAW_GATEWAY_TOKEN={}\nOPENCLAW_SAFE_MODE=1\nLOG_LEVEL=info\n",
+    http_port, https_port, bind_host, gateway_token
   );
   fs::write(dir.join(".env"), env_content).map_err(|e| e.to_string())?;
 
