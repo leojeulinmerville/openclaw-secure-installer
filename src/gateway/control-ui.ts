@@ -67,9 +67,21 @@ type ControlUiAvatarMeta = {
 };
 
 function applyControlUiSecurityHeaders(res: ServerResponse) {
+  const csp = [
+    "default-src 'self'",
+    "base-uri 'none'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: http: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' ws: wss: http: https:",
+  ].join("; ");
   res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+  res.setHeader("Content-Security-Policy", csp);
   res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
 }
 
 function sendJson(res: ServerResponse, status: number, body: unknown) {

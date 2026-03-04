@@ -300,6 +300,14 @@ export async function startGatewayServer(
       ? { kind: "resolved", path: resolvedRoot }
       : { kind: "missing" };
   }
+  if (controlUiEnabled) {
+    if (controlUiRootState?.kind === "resolved") {
+      const uiPath = controlUiBasePath ? `${controlUiBasePath}/` : "/";
+      log.info(`gateway: Control UI assets detected (route ${uiPath})`);
+    } else {
+      log.warn("gateway: Control UI assets not detected; UI routes will return 503");
+    }
+  }
 
   const wizardRunner = opts.wizardRunner ?? runOnboardingWizard;
   const { wizardSessions, findRunningWizard, purgeWizardSession } = createWizardSessionTracker();

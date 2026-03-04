@@ -9,7 +9,7 @@ import {
   type ResolvedGatewayAuth,
   resolveGatewayAuth,
 } from "./auth.js";
-import { normalizeControlUiBasePath } from "./control-ui-shared.js";
+import { resolveControlUiBasePath } from "./control-ui-shared.js";
 import { resolveHooksConfig } from "./hooks.js";
 import { isLoopbackHost, resolveGatewayBindHost } from "./net.js";
 
@@ -51,7 +51,7 @@ export async function resolveGatewayRuntimeConfig(params: {
     false;
   const openResponsesConfig = params.cfg.gateway?.http?.endpoints?.responses;
   const openResponsesEnabled = params.openResponsesEnabled ?? openResponsesConfig?.enabled ?? false;
-  const controlUiBasePath = normalizeControlUiBasePath(params.cfg.gateway?.controlUi?.basePath);
+  const controlUiBasePath = resolveControlUiBasePath(params.cfg.gateway?.controlUi?.basePath);
   const controlUiRootRaw = params.cfg.gateway?.controlUi?.root;
   const controlUiRoot =
     typeof controlUiRootRaw === "string" && controlUiRootRaw.trim().length > 0

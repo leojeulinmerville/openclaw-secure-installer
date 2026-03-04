@@ -1,4 +1,5 @@
 const CONTROL_UI_AVATAR_PREFIX = "/avatar";
+export const DEFAULT_CONTROL_UI_BASE_PATH = "/openclaw";
 
 export function normalizeControlUiBasePath(basePath?: string): string {
   if (!basePath) {
@@ -18,6 +19,13 @@ export function normalizeControlUiBasePath(basePath?: string): string {
     normalized = normalized.slice(0, -1);
   }
   return normalized;
+}
+
+export function resolveControlUiBasePath(basePath?: string): string {
+  if (basePath === undefined) {
+    return DEFAULT_CONTROL_UI_BASE_PATH;
+  }
+  return normalizeControlUiBasePath(basePath);
 }
 
 export function buildControlUiAvatarUrl(basePath: string, agentId: string): string {
