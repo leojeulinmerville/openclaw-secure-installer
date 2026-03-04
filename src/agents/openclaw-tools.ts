@@ -57,6 +57,8 @@ export function createOpenClawTools(options?: {
   requireExplicitMessageTarget?: boolean;
   /** If true, omit the message tool from the tool list. */
   disableMessageTool?: boolean;
+  /** If false, skip plugin tool discovery and return core tools only. */
+  includePluginTools?: boolean;
 }): AnyAgentTool[] {
   const imageTool = options?.agentDir?.trim()
     ? createImageTool({
@@ -147,6 +149,10 @@ export function createOpenClawTools(options?: {
     ...(webFetchTool ? [webFetchTool] : []),
     ...(imageTool ? [imageTool] : []),
   ];
+
+  if (options?.includePluginTools === false) {
+    return tools;
+  }
 
   const pluginTools = resolvePluginTools({
     context: {
