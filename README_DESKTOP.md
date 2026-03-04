@@ -92,9 +92,13 @@ This starts the Vite dev server and the Tauri shell.
 ### Gateway binding defaults
 - Gateway port publish is localhost-only by default:
   - compose mapping uses `OPENCLAW_BIND_HOST` with default `127.0.0.1`
-- Desktop writes a per-install local gateway auth token in `.env`:
-  - `OPENCLAW_GATEWAY_TOKEN=desktop-<install_id>`
-  - used by upstream gateway auth while container bind mode stays `lan`
+- Desktop stores gateway auth secret in OS keychain (Windows Credential Manager):
+  - key id: `gateway.auth.token`
+  - `.env` stores only non-secret identifiers (`OPENCLAW_GATEWAY_TOKEN_REF=keychain:gateway.auth.token`)
+  - legacy `.env` `OPENCLAW_GATEWAY_TOKEN` is imported once into keychain, then removed from `.env`
+- At gateway startup, desktop injects runtime-only env vars to `docker compose up`:
+  - `OPENCLAW_GATEWAY_TOKEN`
+  - `OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN` (cookie bootstrap token for this session)
 - Installer includes an explicit advanced toggle:
   - **Expose gateway to LAN**
   - enabled = `OPENCLAW_BIND_HOST=0.0.0.0`
@@ -109,7 +113,19 @@ This starts the Vite dev server and the Tauri shell.
   - channels
   - tools
   - orchestrators
+- Capabilities now also advertise Control UI auth posture:
+  - `control_ui.auth_required`
+  - `control_ui.auth_mode` (`cookie` by default in desktop flow)
+  - `control_ui.insecure_fallback`
 - If gateway is not running or endpoint is unavailable, desktop returns a safe empty structure.
+
+### Local auth for Console
+- Desktop opens Console through a local bootstrap route:
+  - `GET /api/v1/local-auth/bootstrap?token=<runtime-token>&next=/openclaw/`
+- Gateway validates the bootstrap token (local-only), then sets:
+  - `openclaw_local_session` cookie (`HttpOnly`, `SameSite=Strict`)
+- Upstream Control UI then uses normal same-origin requests (HTTP + WS) without storing gateway token in UI JavaScript.
+- If cookie bootstrap is unavailable, Console shows an explicit insecure-fallback warning.
 
 ### Safe Mode posture
 - Gateway compose is started with `OPENCLAW_SAFE_MODE=1`.
@@ -143,7 +159,7 @@ Bundle output is placed under `desktop/src-tauri/target/release/bundle`.
 
 ## Limitations
 - Orchestration commands are not implemented yet.
-- Secrets are not stored yet.
+- Browser fallback opened directly to root may require manual auth if no session cookie is present.
 - The wizard UI is a placeholder for upcoming steps.
 
 ## Troubleshooting
@@ -160,6 +176,25 @@ Bundle output is placed under `desktop/src-tauri/target/release/bundle`.
 - If gateway should be local-only but is reachable from another host:
   - verify `OPENCLAW_BIND_HOST=127.0.0.1` in app data `.env`
   - disable **Expose gateway to LAN** in installer/settings and restart gateway
+- To verify LAN exposure is off by default:
+  - inspect published ports: `docker ps --format "{{.Names}} {{.Ports}}" | findstr gateway`
+  - expected host binding: `127.0.0.1:<port>->8080/tcp` (not `0.0.0.0`)
 - If capabilities are empty while gateway is running:
   - check `http://127.0.0.1:<port>/api/v1/capabilities`
   - if auth/proxy rules block it, local desktop fallback remains safe-empty
+
+## Windows e2e command
+Use the Windows-safe runner (sets `TMP`/`TEMP` to a workspace-local folder and defaults Vitest pool to `threads`):
+
+```text
+pnpm test:e2e:windows
+```
+
+Optional overrides:
+
+```text
+$env:OPENCLAW_TEST_TMP='D:\tmp\openclaw-vitest'; pnpm test:e2e:windows
+$env:OPENCLAW_E2E_POOL='forks'; pnpm test:e2e:windows
+```
+
+If `spawn EPERM` still occurs, your environment may block child-process execution (for example AppLocker/AV policy on `node_modules\esbuild`). Use an allowlisted workspace path and retry.
