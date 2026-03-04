@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { open as openExternal } from '@tauri-apps/plugin-shell';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
-import { ExternalLink, Loader2, Monitor, RefreshCcw, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Loader2, Monitor, RefreshCcw, ShieldAlert } from 'lucide-react';
 import { useDesktop } from '../contexts/DesktopContext';
 import { getConsoleInfo, getRuntimeCapabilities } from '../lib/tauri';
 import type { ConsoleInfo, RuntimeCapabilities } from '../types';
@@ -72,7 +72,12 @@ export function Console() {
   }, [consoleInfo?.url]);
 
   useEffect(() => {
-    if (!isGatewayReady || !consoleInfo?.url || autoOpenedForUrl === consoleInfo.url) {
+    if (
+      !isGatewayReady ||
+      !consoleInfo?.url ||
+      !consoleInfo.ui_available ||
+      autoOpenedForUrl === consoleInfo.url
+    ) {
       return;
     }
     void openConsoleWindow().then((opened) => {
@@ -90,6 +95,18 @@ export function Console() {
       })),
     [capabilities.tools],
   );
+  const apiDocLinks = useMemo(() => {
+    if (!consoleInfo?.port) {
+      return [];
+    }
+    const base = `http://127.0.0.1:${consoleInfo.port}`;
+    return [
+      { label: 'Capabilities API', url: `${base}/api/v1/capabilities` },
+      { label: 'Docs (/docs)', url: `${base}/docs` },
+      { label: 'OpenAPI (/openapi.json)', url: `${base}/openapi.json` },
+    ];
+  }, [consoleInfo?.port]);
+  const canOpenInAppWindow = Boolean(consoleInfo?.url && consoleInfo?.ui_available);
 
   if (!isGatewayReady) {
     return (
@@ -124,7 +141,11 @@ export function Console() {
           <button onClick={() => void load()} className="glass-button text-sm">
             <RefreshCcw className="w-4 h-4" />
           </button>
-          <button onClick={() => void openConsoleWindow()} className="glass-button-accent text-sm">
+          <button
+            onClick={() => void openConsoleWindow()}
+            disabled={!canOpenInAppWindow}
+            className={`text-sm ${canOpenInAppWindow ? 'glass-button-accent' : 'glass-button opacity-60 cursor-not-allowed'}`}
+          >
             <Monitor className="w-4 h-4" />
             Open In-App Window
           </button>
@@ -134,7 +155,7 @@ export function Console() {
               className="glass-button text-sm"
             >
               <ExternalLink className="w-4 h-4" />
-              Open Browser
+              {consoleInfo?.ui_available ? 'Open Browser' : 'Open Browser (Root)'}
             </button>
           )}
         </div>
@@ -152,9 +173,53 @@ export function Console() {
           <Loader2 className="w-5 h-5 animate-spin mr-2" />
           Loading Console metadata...
         </div>
-      ) : (
+      ) : consoleInfo?.ui_available ? (
         <div className="glass-panel p-4 text-sm text-white/70">
           Console opens in a dedicated Tauri window by default for reliability on Windows.
+        </div>
+      ) : (
+        <div className="glass-panel p-4 text-sm text-amber-100 border border-amber-500/30 bg-amber-500/10">
+          Console route metadata loaded, but no HTML Control UI route was discovered.
+        </div>
+      )}
+
+      {!loading && consoleInfo && !consoleInfo.ui_available && (
+        <div className="glass-panel p-4 border border-amber-500/30 bg-amber-500/10 space-y-3">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-200 mt-0.5" />
+            <div className="space-y-1">
+              <h3 className="text-sm font-semibold text-amber-100">
+                Gateway is running, but this image does not expose the upstream Control UI
+              </h3>
+              <p className="text-xs text-amber-50/90">
+                {consoleInfo.diagnostic || 'No HTML route found for Control UI candidates.'}
+              </p>
+              <p className="text-xs text-amber-50/80">
+                Update/rebuild the gateway image to include Control UI or add a separate control-ui service.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {consoleInfo.url && (
+              <button
+                onClick={() => void openExternal(consoleInfo.url)}
+                className="glass-button text-xs"
+              >
+                <ExternalLink className="w-3 h-3" />
+                Open Gateway Root
+              </button>
+            )}
+            {apiDocLinks.map((link) => (
+              <button
+                key={link.url}
+                onClick={() => void openExternal(link.url)}
+                className="glass-button text-xs"
+              >
+                <ExternalLink className="w-3 h-3" />
+                {link.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

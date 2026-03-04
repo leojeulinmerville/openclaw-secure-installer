@@ -95,6 +95,8 @@ export interface ConsoleInfo {
   url: string;
   port: number;
   base_path: string;
+  ui_available: boolean;
+  diagnostic: string;
 }
 
 export interface CapabilityChannel {

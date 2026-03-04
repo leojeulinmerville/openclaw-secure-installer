@@ -119,6 +119,8 @@ pub struct ConsoleInfo {
     pub url: String,
     pub port: u16,
     pub base_path: String,
+    pub ui_available: bool,
+    pub diagnostic: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -357,6 +359,86 @@ async fn fetch_gateway_capabilities(port: u16) -> Result<RuntimeCapabilities, St
         .json::<RuntimeCapabilities>()
         .await
         .map_err(|e| format!("Capabilities response parse failed: {}", e))
+}
+
+fn display_control_ui_path(base_path: &str) -> String {
+    if base_path.is_empty() {
+        "/".to_string()
+    } else {
+        format!("{}/", base_path)
+    }
+}
+
+fn response_looks_like_html(status: u16, content_type: Option<&str>, body_prefix: &str) -> bool {
+    if status != 200 {
+        return false;
+    }
+
+    if content_type
+        .map(|value| value.to_ascii_lowercase().contains("text/html"))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+
+    let trimmed = body_prefix.trim_start().to_ascii_lowercase();
+    trimmed.starts_with("<!doctype html") || trimmed.starts_with("<html")
+}
+
+async fn check_control_ui_candidate(port: u16, base_path: &str) -> Result<bool, String> {
+    let url = build_console_url(port, base_path);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(2))
+        .build()
+        .map_err(|e| format!("Failed to build Control UI probe client: {}", e))?;
+
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Control UI probe failed for {}: {}", url, e))?;
+
+    let status = response.status().as_u16();
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .map(|value| value.to_string());
+    let body = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read probe response body for {}: {}", url, e))?;
+    let prefix_len = body.len().min(256);
+    let body_prefix = String::from_utf8_lossy(&body[..prefix_len]);
+
+    Ok(response_looks_like_html(
+        status,
+        content_type.as_deref(),
+        body_prefix.as_ref(),
+    ))
+}
+
+#[derive(Debug, Clone)]
+struct ControlUiProbeResult {
+    base_path: String,
+    ui_available: bool,
+}
+
+async fn probe_control_ui_base_path(port: u16) -> ControlUiProbeResult {
+    for candidate in ["", "/openclaw", "/ui", "/console", "/app"] {
+        let normalized = normalize_base_path(candidate);
+        if let Ok(true) = check_control_ui_candidate(port, &normalized).await {
+            return ControlUiProbeResult {
+                base_path: normalized,
+                ui_available: true,
+            };
+        }
+    }
+
+    ControlUiProbeResult {
+        base_path: String::new(),
+        ui_available: false,
+    }
 }
 
 /// Probe the gateway /health endpoint via raw HTTP over TCP.
@@ -1162,20 +1244,59 @@ pub async fn get_gateway_status(app: AppHandle) -> Result<GatewayStatusResult, S
 pub async fn get_console_info(app: AppHandle) -> Result<ConsoleInfo, String> {
     let dir = get_app_data_dir(&app)?;
     let port = read_http_port(&dir);
-    let capabilities = fetch_gateway_capabilities(port).await.ok();
-    let resolved = capabilities
-        .as_ref()
-        .map(|entry| normalize_base_path(&entry.control_ui.base_path))
-        .unwrap_or_else(|| normalize_base_path(DEFAULT_CONTROL_UI_BASE_PATH));
-    let base_path = if resolved.is_empty() {
-        normalize_base_path(DEFAULT_CONTROL_UI_BASE_PATH)
-    } else {
-        resolved
-    };
+
+    let mut base_path = normalize_base_path(DEFAULT_CONTROL_UI_BASE_PATH);
+    let mut ui_available = false;
+    let mut diagnostic = String::new();
+    let mut capabilities_reachable = false;
+
+    if let Ok(capabilities) = fetch_gateway_capabilities(port).await {
+        capabilities_reachable = true;
+        let capability_path = normalize_base_path(&capabilities.control_ui.base_path);
+        if check_control_ui_candidate(port, &capability_path)
+            .await
+            .unwrap_or(false)
+        {
+            base_path = capability_path;
+            ui_available = true;
+            diagnostic = format!(
+                "Control UI route discovered from capabilities at {}.",
+                display_control_ui_path(&base_path)
+            );
+        } else if capability_path.is_empty() {
+            diagnostic = "Capabilities endpoint is reachable, but gateway root did not return an HTML Control UI.".to_string();
+        } else {
+            diagnostic = format!(
+                "Capabilities reported {}, but that route did not return an HTML Control UI.",
+                display_control_ui_path(&capability_path)
+            );
+        }
+    }
+
+    if !ui_available {
+        let probe = probe_control_ui_base_path(port).await;
+        if probe.ui_available {
+            base_path = probe.base_path;
+            ui_available = true;
+            diagnostic = format!(
+                "Control UI route discovered by probe at {}.",
+                display_control_ui_path(&base_path)
+            );
+        } else if capabilities_reachable {
+            diagnostic =
+                "Gateway did not expose a Control UI. API is reachable but no HTML route found."
+                    .to_string();
+        } else {
+            diagnostic = "Gateway did not expose a Control UI route. Update/rebuild the gateway image to include Control UI or add a separate control-ui service.".to_string();
+        }
+    }
+
     Ok(ConsoleInfo {
         url: build_console_url(port, &base_path),
         port,
         base_path,
+        ui_available,
+        diagnostic,
     })
 }
 
