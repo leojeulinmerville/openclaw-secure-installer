@@ -20,27 +20,6 @@ import { PageErrorBoundary } from './components/layout/PageErrorBoundary';
 import { GatewayBanner } from './components/GatewayBanner';
 import { DesktopProvider, useDesktop } from './contexts/DesktopContext';
 
-const CONSOLE_FALLBACK_PAGES = new Set<Page>([
-  'providers',
-  'agents',
-  'agent-detail',
-  'create-agent',
-  'policies',
-  'activity',
-  'chat',
-  'runs',
-  'run-detail',
-  'create-run',
-  'connect-ollama',
-]);
-
-function resolvePage(page: Page): Page {
-  if (CONSOLE_FALLBACK_PAGES.has(page)) {
-    return 'console';
-  }
-  return page;
-}
-
 function AppContent() {
   const [page, setPage] = useState<Page>('overview');
   const [agentDetailId, setAgentDetailId] = useState<string | null>(null);
@@ -48,11 +27,11 @@ function AppContent() {
 
   // Navigation helper that accepts optional detail param
   const navigate = (p: Page, detail?: string) => {
-    setPage(resolvePage(p));
+    setPage(p);
     if (detail) setAgentDetailId(detail);
   };
 
-  const currentPage = resolvePage(page);
+  const currentPage = page;
 
   const renderPage = () => {
     switch (currentPage) {
