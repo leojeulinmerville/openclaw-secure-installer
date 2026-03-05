@@ -876,11 +876,8 @@ pub fn generate_compose_content(image: &str) -> String {
         r#"services:
   gateway:
     image: {}
-    command: ["node", "dist/entry.js", "gateway", "--allow-unconfigured", "--bind", "lan", "--port", "8080"]
     ports:
-      - "${{OPENCLAW_BIND_HOST:-127.0.0.1}}:${{OPENCLAW_HTTP_PORT:-8080}}:8080"
-    volumes:
-      - openclaw_home:/home/node
+      - "8080:8080"
     environment:
       OPENCLAW_SAFE_MODE: "1"
       LOG_LEVEL: info
@@ -894,9 +891,6 @@ networks:
   default:
     name: openclaw-managed
 
-
-volumes:
-  openclaw_home:
 "#,
         image
     )
@@ -1975,8 +1969,8 @@ mod tests {
     fn test_compose_maps_host_to_container_8080() {
         let content = generate_compose_content("openclaw-gateway:dev");
         assert!(
-            content.contains("${OPENCLAW_BIND_HOST:-127.0.0.1}:${OPENCLAW_HTTP_PORT:-8080}:8080"),
-            "Compose must default to localhost binding and container port 8080"
+            content.contains("\"8080:8080\""),
+            "Compose must map container port 8080 to host 8080"
         );
     }
 
