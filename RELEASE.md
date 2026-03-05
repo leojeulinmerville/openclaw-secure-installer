@@ -1,7 +1,162 @@
 # Release Checklist
 
-This document describes how to build, test, and publish the OpenClaw Secure Installer
-for Windows, plus the companion gateway Docker image.
+This document describes how to build, test, and publish My OpenClaw for Windows,
+plus the companion gateway Docker image.
+
+---
+
+## Prerequisites
+
+| Tool | Version | Check |
+|------|---------|-------|
+| Node.js | 22 LTS | `node -v` |
+| pnpm | 9+ | `pnpm -v` |
+| Rust | stable | `rustc --version` |
+| VS Build Tools | 2022+ | `cl` available in PATH |
+| Docker Desktop | 4.x | `docker --version` |
+
+> **Tip:** Run `pnpm -C desktop doctor` to check Node + pnpm versions.
+
+---
+
+## 0. Preflight — Build Locally Before Tagging
+
+Always validate locally before pushing a tag.
+
+```powershell
+# Full preflight (install → tests → Vite build → Tauri build)
+.\scripts\release-preflight.ps1
+
+# Skip Tauri build (fast iteration: tests + Vite only)
+.\scripts\release-preflight.ps1 -SkipBuild
+
+# Skip Rust tests (when you know tests are clean)
+.\scripts\release-preflight.ps1 -SkipTests
+```
+
+The script prints the MSI and EXE paths on success.
+
+You can also trigger the same steps on CI **without creating a Release** using the
+**Preflight Build** workflow (`Actions → Preflight Build (Desktop + Gateway) → Run workflow`).
+
+---
+
+## 1. Build the Desktop Installer (Local)
+
+```powershell
+# Install dependencies (desktop workspace only — avoids EISDIR on monorepo root)
+pnpm --filter openclaw-secure-installer-desktop... install
+
+# Run Rust tests (from repo root)
+cargo test --manifest-path desktop/src-tauri/Cargo.toml
+
+# Build Vite frontend
+pnpm --filter openclaw-secure-installer-desktop... build
+
+# Build the release installer (MSI + NSIS exe)
+pnpm -C desktop tauri:build
+```
+
+### Where to find the artifacts
+
+| Format | Path |
+|--------|------|
+| MSI | `desktop/src-tauri/target/release/bundle/msi/*.msi` |
+| NSIS | `desktop/src-tauri/target/release/bundle/nsis/*-setup.exe` |
+
+---
+
+## 2. Test the Installer (Fresh Machine)
+
+1. Copy the `.msi` or `.exe` to a clean Windows machine (or VM).
+2. Run the installer — follow the prompts.
+3. Launch **My OpenClaw – Mission Control** from Start Menu.
+4. **Overview**: Gateway should be stopped (red banner) — click "Start Gateway".
+5. **Agents**: Navigate to Agents — should not freeze.
+6. **Providers → Connect Ollama**: if Ollama running, detect + test completion.
+
+> **If the gateway image is not yet published**, build and push manually (see step 3).
+
+## 2b. Gateway Gating Test
+
+1. Stop gateway with `docker stop $(docker ps -q --filter name=openclaw)`.
+2. Banner shows **Gateway Stopped** with a clear error message.
+3. Click **Start Gateway** → recovers.
+4. Click **Retry** after a purposely broken image → shows remediation steps.
+
+---
+
+## 3. Build & Push the Gateway Image
+
+### Automated (CI)
+
+Push a semver tag — `gateway-publish.yml` triggers:
+
+```bash
+git tag v0.2.2
+git push origin v0.2.2
+```
+
+Produces `ghcr.io/leojeulinmerville/openclaw-gateway:0.2.2`, `:stable`, `:sha-<commit>`.
+
+### Manual
+
+```bash
+cd gateway
+docker build -t ghcr.io/leojeulinmerville/openclaw-gateway:stable .
+docker push ghcr.io/leojeulinmerville/openclaw-gateway:stable
+```
+
+> Requires `docker login ghcr.io -u <user> --password-stdin` with a PAT that has `write:packages`.
+
+---
+
+## 4. Create a GitHub Release
+
+### Automated (CI) — Recommended
+
+Push a `v*` tag → `desktop-build.yml` runs and creates a **published Release** with
+the MSI and EXE attached as downloadable assets:
+
+```bash
+git tag v0.2.2
+git push origin main --tags
+```
+
+The release:
+- Is published immediately (not a draft)
+- Attaches `*.msi` and `*-setup.exe` as assets
+- Auto-generates release notes from PR titles
+- Is marked `prerelease` if tag contains `-beta`, `-rc`, or `-alpha`
+
+### Manual
+
+1. Build locally (step 1).
+2. Create a release on GitHub.
+3. Upload the MSI and exe from `target/release/bundle/`.
+
+---
+
+## 5. Code Signing (Future)
+
+The installer is currently **unsigned**. Windows SmartScreen will warn on first run.
+
+To add signing:
+1. Obtain an EV code signing certificate.
+2. Set `certificateThumbprint` in `tauri.conf.json` → `bundle.windows`.
+3. Set `TAURI_SIGNING_PRIVATE_KEY` secret in GitHub Actions.
+4. See: https://v2.tauri.app/distribute/sign/windows/
+
+---
+
+## Version Bump
+
+Before a release, update version in all three files:
+
+1. `desktop/src-tauri/tauri.conf.json` → `"version"`
+2. `desktop/package.json` → `"version"`
+3. `desktop/src-tauri/Cargo.toml` → `version`
+
 
 ---
 

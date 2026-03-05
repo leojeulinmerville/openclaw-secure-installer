@@ -1,6 +1,33 @@
 # Changelog
 
+## v0.2.2 - 2026-03-05
+
+### Fixes — CI/CD reliability sprint
+
+- **P0 — Gateway Dockerfile** `gateway/Dockerfile` was the upstream OpenClaw monorepo
+  Dockerfile (referenced `pnpm-workspace.yaml`, `ui/`, `patches/`, `scripts/`, `pnpm build`)
+  which don't exist in this repo. Replaced with a **minimal single-stage image** that simply
+  copies `openclaw.mjs` and runs it with `node`. Adds a `HEALTHCHECK` instruction.
+- **P0 — Desktop release assets**: `desktop-build.yml` was creating `draft: true` releases.
+  Changed to `draft: false`. Fixed NSIS glob to `*-setup.exe`. Releases are now immediately
+  published with MSI + EXE as downloadable assets. Added `generate_release_notes: true`
+  and auto-prerelease detection for `-beta`/`-rc`/`-alpha` tags.
+- **P1 — Preflight workflow**: Added `.github/workflows/preflight.yml` — a manual
+  `workflow_dispatch` workflow that runs the identical build steps (install → tests → build →
+  Tauri build) but **does not create a GitHub Release**. Uploads MSI + EXE as run-numbered
+  artifacts for validation before tagging. Also validates the gateway Docker build (no push).
+- **P1 — Local preflight script**: Added `scripts/release-preflight.ps1` for Windows
+  developers. Runs all release steps locally: `pnpm install`, `cargo test`, `pnpm build`,
+  `tauri:build`. Supports `-SkipTests` and `-SkipBuild` flags for fast iteration.
+
+### Version
+- Bumped to `0.2.2` in `tauri.conf.json`, `package.json`, `Cargo.toml`.
+
+---
+
 ## v0.2.1 - 2026-03-05
+
+
 
 ### Fixes (hotfix sprint)
 - **P0 — Start Gateway regression**: `GatewayBanner` now reads the `GatewayStartResult` and surfaces `userFriendlyTitle`, `userFriendlyMessage`, remediation steps, and a collapsible diagnostics panel instead of silently swallowing errors. Added Retry button on failure state.

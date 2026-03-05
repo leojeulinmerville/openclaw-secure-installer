@@ -1,41 +1,21 @@
 # syntax=docker/dockerfile:1.7
+# OpenClaw Gateway – minimal single-file Node.js image.
+# Context: ./gateway  (only openclaw.mjs lives here)
 
-FROM node:22-bookworm AS builder
-
-RUN corepack enable
-
-WORKDIR /app
-
-# Install dependencies first for cacheable layers.
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY ui/package.json ./ui/package.json
-COPY patches ./patches
-COPY scripts ./scripts
-RUN pnpm install --frozen-lockfile
-
-# Build gateway runtime + upstream Control UI assets.
-COPY . .
-ENV OPENCLAW_A2UI_SKIP_MISSING=1
-RUN pnpm build
-ENV OPENCLAW_PREFER_PNPM=1
-RUN pnpm ui:build
-ENV CI=true
-RUN pnpm prune --prod
-FROM node:22-bookworm-slim
-
-WORKDIR /home/node
+FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 
-COPY --from=builder --chown=node:node /app/openclaw.mjs ./openclaw.mjs
-COPY --from=builder --chown=node:node /app/package.json ./package.json
-COPY --from=builder --chown=node:node /app/dist ./dist
-COPY --from=builder --chown=node:node /app/extensions ./extensions
-COPY --from=builder --chown=node:node /app/skills ./skills
-COPY --from=builder --chown=node:node /app/node_modules ./node_modules
+WORKDIR /home/node
+
+# The entire gateway is one self-contained ESM file – no build step needed.
+COPY --chown=node:node openclaw.mjs ./openclaw.mjs
 
 EXPOSE 8080
 
 USER node
 
-CMD ["node", "dist/entry.js", "gateway", "--allow-unconfigured", "--bind", "lan", "--port", "8080"]
+HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e "fetch('http://localhost:8080/health').then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))"
+
+CMD ["node", "openclaw.mjs"]
