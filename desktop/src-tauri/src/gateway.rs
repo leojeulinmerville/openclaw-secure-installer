@@ -979,17 +979,40 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     let bootstrap_token = format!("desktop-bootstrap-{}", uuid::Uuid::new_v4().simple());
 
     if !compose_file.exists() {
-        return Ok(GatewayStartResult {
-            gateway_active: false,
-            status: "failed".into(),
-            user_friendly_title: "Not Configured".into(),
-            user_friendly_message: "docker-compose.yml not found. Complete the Configure step first.".into(),
-            raw_diagnostics: String::new(),
-            remediation_steps: vec!["Go back to Step 2 and click Save & Configure.".into()],
-            compose_file_path: compose_file.display().to_string(),
-            warning: None,
-        });
+        // First run: auto-generate the compose file from the stored (or default) gateway image.
+        // This makes Start Gateway work without requiring a separate Configure step.
+        let image = if state.gateway_image.trim().is_empty() {
+            crate::state_manager::DEFAULT_GATEWAY_IMAGE.to_string()
+        } else {
+            state.gateway_image.clone()
+        };
+        let content = generate_compose_content(&image);
+        if let Err(e) = std::fs::create_dir_all(&dir) {
+            return Ok(GatewayStartResult {
+                gateway_active: false,
+                status: "failed".into(),
+                user_friendly_title: "Setup Error".into(),
+                user_friendly_message: format!("Could not create app data directory: {}", e),
+                raw_diagnostics: String::new(),
+                remediation_steps: vec!["Check disk permissions for the app data folder.".into()],
+                compose_file_path: compose_file.display().to_string(),
+                warning: None,
+            });
+        }
+        if let Err(e) = std::fs::write(&compose_file, &content) {
+            return Ok(GatewayStartResult {
+                gateway_active: false,
+                status: "failed".into(),
+                user_friendly_title: "Setup Error".into(),
+                user_friendly_message: format!("Could not write docker-compose.yml: {}", e),
+                raw_diagnostics: String::new(),
+                remediation_steps: vec!["Check disk permissions for the app data folder.".into()],
+                compose_file_path: compose_file.display().to_string(),
+                warning: None,
+            });
+        }
     }
+
 
     // 1) Check if already running BEFORE compose up (strict, no stability window)
     let (pre_running, _) = check_gateway_strictly(&dir, false);
