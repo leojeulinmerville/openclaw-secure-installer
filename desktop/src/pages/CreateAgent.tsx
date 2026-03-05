@@ -1,10 +1,11 @@
-import { useState } from 'react';
-import { createAgent, startAgent } from '../lib/tauri';
+import { useState, useEffect } from 'react';
+import { createAgent, startAgent, ollamaListModels, lmstudioListModels } from '../lib/tauri';
 import type { Page } from '../types';
 
 const PROVIDERS = [
   { value: 'openai', label: 'OpenAI', models: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'] },
   { value: 'ollama', label: 'Ollama (local)', models: ['llama3', 'mistral', 'codellama', 'phi3'] },
+  { value: 'lmstudio', label: 'LM Studio (local)', models: [] },
 ];
 
 const PRESETS = [
@@ -22,6 +23,7 @@ export default function CreateAgent({ onNavigate }: Props) {
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('openai');
   const [model, setModel] = useState('gpt-4o');
+  const [availableModels, setAvailableModels] = useState<string[]>(PROVIDERS[0].models);
   const [workspace, setWorkspace] = useState('');
   const [preset, setPreset] = useState('default');
   const [networkEnabled, setNetworkEnabled] = useState(false);
@@ -31,10 +33,42 @@ export default function CreateAgent({ onNavigate }: Props) {
 
   const selectedProvider = PROVIDERS.find((p) => p.value === provider);
   const canProceed =
-    step === 0 ? name.trim().length > 0 :
+    step === 0 ? name.trim().length > 0 && availableModels.length > 0 && availableModels[0] !== 'Connection failed' && availableModels[0] !== 'No models found' :
     step === 1 ? true :
     step === 2 ? true :
     true;
+
+  useEffect(() => {
+    let active = true;
+    if (provider === 'openai') {
+      const p = PROVIDERS.find(x => x.value === 'openai');
+      setAvailableModels(p?.models || []);
+      setModel(p?.models[0] || '');
+    } else if (provider === 'ollama') {
+      ollamaListModels('http://localhost:11434').then((res: any[]) => {
+        if (!active) return;
+        const names = res && res.length > 0 ? res.map(m => typeof m === 'string' ? m : m.name) : ['llama3', 'mistral'];
+        setAvailableModels(names);
+        setModel(names[0]);
+      }).catch(() => {
+        if (!active) return;
+        setAvailableModels(['llama3', 'mistral']);
+        setModel('llama3');
+      });
+    } else if (provider === 'lmstudio') {
+      lmstudioListModels('http://localhost:1234/v1').then((res: any[]) => {
+        if (!active) return;
+        const names = res && res.length > 0 ? res.map(m => typeof m === 'string' ? m : m.name || m.id) : ['No models found'];
+        setAvailableModels(names);
+        setModel(names[0]);
+      }).catch(() => {
+        if (!active) return;
+        setAvailableModels(['Connection failed']);
+        setModel('Connection failed');
+      });
+    }
+    return () => { active = false; };
+  }, [provider]);
 
   async function handleCreate() {
     setCreating(true);
@@ -92,8 +126,6 @@ export default function CreateAgent({ onNavigate }: Props) {
               <label>Provider</label>
               <select className="input" value={provider} onChange={(e) => {
                 setProvider(e.target.value);
-                const p = PROVIDERS.find((p) => p.value === e.target.value);
-                if (p) setModel(p.models[0]);
               }}>
                 {PROVIDERS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
               </select>
@@ -106,7 +138,7 @@ export default function CreateAgent({ onNavigate }: Props) {
             <div className="form-group">
               <label>Model</label>
               <select className="input" value={model} onChange={(e) => setModel(e.target.value)}>
-                {selectedProvider?.models.map((m) => <option key={m} value={m}>{m}</option>)}
+                {availableModels.map((m) => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
           </div>

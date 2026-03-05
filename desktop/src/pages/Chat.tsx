@@ -60,11 +60,12 @@ export default function Chat() {
       setAvailableModels(OPENAI_MODELS);
       setModel(OPENAI_MODELS[0]);
     } else if (provider === 'ollama') {
-      ollamaListModels(ollamaEndpoint).then(models => {
+      ollamaListModels(ollamaEndpoint).then((models: any[]) => {
         if (!active) return;
         if (models && models.length > 0) {
-          setAvailableModels(models);
-          setModel(models[0]);
+          const names = models.map(m => typeof m === 'string' ? m : m.name);
+          setAvailableModels(names);
+          setModel(names[0]);
         } else {
           setAvailableModels(DEFAULT_OLLAMA_MODELS);
           setModel(DEFAULT_OLLAMA_MODELS[0]);
@@ -75,12 +76,13 @@ export default function Chat() {
         setModel(DEFAULT_OLLAMA_MODELS[0]);
       });
     } else if (provider === 'lmstudio') {
-      lmstudioListModels(lmstudioEndpoint).then(models => {
+      lmstudioListModels(lmstudioEndpoint).then((models: any[]) => {
         if (!active) return;
         if (models && models.length > 0) {
           setLmstudioOk(true);
-          setAvailableModels(models);
-          setModel(models[0]);
+          const names = models.map(m => typeof m === 'string' ? m : m.name || m.id);
+          setAvailableModels(names);
+          setModel(names[0]);
         } else {
           setLmstudioOk(false);
           setAvailableModels(['No models found']);

@@ -241,6 +241,35 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // ── Connections ─────────────────────────────────────────────────
+  if (path.startsWith("/api/v1/connections")) {
+    if (path === "/api/v1/connections/schema" && method === "GET") {
+      json(res, 200, {
+        version: "v1",
+        generated_at: new Date().toISOString(),
+        safe_mode: SAFE_MODE,
+        channels: [],
+        providers: []
+      });
+      return;
+    }
+    if (path === "/api/v1/connections/status" && method === "GET") {
+      json(res, 200, {
+        version: "v1",
+        generated_at: new Date().toISOString(),
+        safe_mode: SAFE_MODE,
+        channels: [],
+        providers: []
+      });
+      return;
+    }
+    // Stub for configure / test
+    if (method === "POST") {
+      json(res, 200, { ok: true, message: "Stub executed successfully in gateway" });
+      return;
+    }
+  }
+
   // ── Root info ───────────────────────────────────────────────────
   if (path === "/" || path === "") {
     json(res, 200, {
@@ -256,6 +285,8 @@ const server = createServer(async (req, res) => {
         "/api/v1/agents",
         "/api/v1/events",
         "/api/v1/policies",
+        "/api/v1/connections/schema",
+        "/api/v1/connections/status",
       ],
     });
     log("info", `GET / → 200`);

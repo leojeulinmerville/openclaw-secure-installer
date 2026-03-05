@@ -62,6 +62,7 @@ struct OpenAIMessage {
     content: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
 struct OpenAIUsage {
     prompt_tokens: Option<u32>,
     completion_tokens: Option<u32>,

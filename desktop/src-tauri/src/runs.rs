@@ -49,6 +49,7 @@ pub struct RunEvent {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CreateRunRequest {
     pub agent_id: String,
     pub provider: String,
