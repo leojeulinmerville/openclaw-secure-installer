@@ -132,6 +132,12 @@ export const testOllamaConnection = (endpoint?: string) =>
 export const testGatewayOllamaAccess = () =>
   invoke<boolean>('test_gateway_ollama_access');
 
+export const ollamaListModels = (endpoint?: string) =>
+  invoke<string[]>('ollama_list_models', { endpoint });
+
+export const lmstudioListModels = (endpoint?: string) =>
+  invoke<string[]>('lmstudio_list_models', { endpoint });
+
 // ── Runs ────────────────────────────────────────────────────────────
 import type { Run, RunEvent } from '../types';
 

@@ -26,23 +26,12 @@ const DEFAULT_CONTROL_UI_BASE_PATH: &str = "";
 const DEFAULT_CONTROL_UI_AUTH_MODE: &str = "token";
 const LOCAL_AUTH_BOOTSTRAP_PATH: &str = "/api/v1/local-auth/bootstrap";
 
-static RUNTIME_BOOTSTRAP_TOKEN: OnceLock<Mutex<Option<String>>> = OnceLock::new();
-
-fn bootstrap_token_store() -> &'static Mutex<Option<String>> {
-    RUNTIME_BOOTSTRAP_TOKEN.get_or_init(|| Mutex::new(None))
-}
-
-fn set_runtime_bootstrap_token(value: Option<String>) {
-    if let Ok(mut guard) = bootstrap_token_store().lock() {
-        *guard = value;
-    }
-}
-
-fn get_runtime_bootstrap_token() -> Option<String> {
-    bootstrap_token_store()
-        .lock()
-        .ok()
-        .and_then(|guard| guard.clone())
+fn get_desktop_bootstrap_token(app: &AppHandle) -> String {
+    crate::secrets::get_secret_internal(app, "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN").unwrap_or_else(|| {
+        let t = format!("desktop-bootstrap-{}", uuid::Uuid::new_v4().simple());
+        let _ = crate::secrets::set_secret_internal(app, "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN", &t);
+        t
+    })
 }
 
 pub(crate) fn sanitize_output(text: &str) -> String {
@@ -459,8 +448,7 @@ async fn call_gateway_connections_api(
         return Err("Gateway is not running. Start the gateway to manage connections.".to_string());
     }
     let port = read_http_port(&dir);
-    let bootstrap_token = get_runtime_bootstrap_token()
-        .ok_or_else(|| "Local session bootstrap is unavailable. Restart gateway from desktop.".to_string())?;
+    let bootstrap_token = get_desktop_bootstrap_token(app);
     let cookie = bootstrap_local_session_cookie(port, &bootstrap_token).await?;
 
     let url = format!("http://127.0.0.1:{}{}", port, path);
@@ -970,7 +958,7 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     let compose_file = dir.join("docker-compose.yml");
     let state = load_state(&app);
     let gateway_token = ensure_gateway_token_for_install(&app, &state.install_id)?;
-    let bootstrap_token = format!("desktop-bootstrap-{}", uuid::Uuid::new_v4().simple());
+    let bootstrap_token = get_desktop_bootstrap_token(&app);
 
     if !compose_file.exists() {
         // First run: auto-generate the compose file from the stored (or default) gateway image.
@@ -1011,9 +999,6 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     // 1) Check if already running BEFORE compose up (strict, no stability window)
     let (pre_running, _) = check_gateway_strictly(&dir, false);
     if pre_running {
-        if get_runtime_bootstrap_token().is_none() {
-            set_runtime_bootstrap_token(None);
-        }
         return Ok(GatewayStartResult {
             gateway_active: true,
             status: "already_running".into(),
@@ -1063,7 +1048,6 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
 
     // 3) If exit code != 0 → check if maybe running anyway (strict)
     if !success {
-        set_runtime_bootstrap_token(None);
         let (post_running, _inspect_diag) = check_gateway_strictly(&dir, false);
         if post_running {
             return Ok(GatewayStartResult {
@@ -1097,7 +1081,6 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
     let (is_stable, inspect_diag) = check_gateway_strictly(&dir, true);
 
     if is_stable {
-        set_runtime_bootstrap_token(Some(bootstrap_token));
         // 5) Health probe — try /health on configured HTTP port
         let http_port = read_http_port(&dir);
         let health = probe_health(http_port);
@@ -1126,7 +1109,6 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
             warning: health_warning,
         })
     } else {
-        set_runtime_bootstrap_token(None);
         // Container started but is crashing / restarting
         let logs = get_gateway_logs(&dir);
         let full_diag = format!(
@@ -1406,7 +1388,6 @@ pub async fn open_app_data_folder(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn stop_gateway(app: AppHandle) -> Result<String, String> {
     let dir = get_app_data_dir(&app)?;
-    set_runtime_bootstrap_token(None);
 
     // Check if we should stop agents
     let mut state = load_state(&app);
@@ -1594,13 +1575,9 @@ pub async fn get_console_info(app: AppHandle) -> Result<ConsoleInfo, String> {
     }
 
     if !capabilities_reachable {
-        if get_runtime_bootstrap_token().is_some() {
-            auth_mode = "cookie".to_string();
-            insecure_fallback = false;
-        } else {
-            auth_mode = DEFAULT_CONTROL_UI_AUTH_MODE.to_string();
-            insecure_fallback = true;
-        }
+        let _token = get_desktop_bootstrap_token(&app);
+        auth_mode = "cookie".to_string();
+        insecure_fallback = false;
     }
     if insecure_fallback {
         if diagnostic.is_empty() {
@@ -1626,11 +1603,8 @@ pub async fn get_console_info(app: AppHandle) -> Result<ConsoleInfo, String> {
 #[tauri::command]
 pub async fn open_console_window(app: AppHandle) -> Result<(), String> {
     let info = get_console_info(app.clone()).await?;
-    let target_url = if let Some(bootstrap_token) = get_runtime_bootstrap_token() {
-        build_console_bootstrap_url(info.port, &info.base_path, &bootstrap_token)
-    } else {
-        info.url.clone()
-    };
+    let bootstrap_token = get_desktop_bootstrap_token(&app);
+    let target_url = build_console_bootstrap_url(info.port, &info.base_path, &bootstrap_token);
     let parsed =
         reqwest::Url::parse(&target_url).map_err(|e| format!("Invalid console URL: {}", e))?;
 

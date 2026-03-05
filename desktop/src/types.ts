@@ -418,6 +418,7 @@ export interface ChatRequest {
   model: string;
   messages: ChatMessage[];
   ollamaEndpoint?: string;
+  apiBase?: string;
 }
 
 export interface ChatResponse {

@@ -67,6 +67,7 @@ fn main() {
         // Chat / LLM
         chat::chat_send,
         chat::test_ollama_connection,
+        chat::lmstudio_list_models,
         llm::ollama_test,
         llm::ollama_list_models,
         llm::ollama_pull_model,

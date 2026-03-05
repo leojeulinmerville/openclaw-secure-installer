@@ -22,6 +22,8 @@ pub struct ChatRequest {
     pub messages: Vec<ChatMessage>,
     /// Ollama endpoint (e.g. "http://localhost:11434")
     pub ollama_endpoint: Option<String>,
+    /// Base URL for LM Studio or custom OpenAI (e.g. "http://localhost:1234/v1")
+    pub api_base: Option<String>,
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -60,11 +62,20 @@ struct OpenAIMessage {
     content: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
 struct OpenAIUsage {
     prompt_tokens: Option<u32>,
     completion_tokens: Option<u32>,
     total_tokens: Option<u32>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIModelsResponse {
+    data: Vec<OpenAIModelData>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAIModelData {
+    id: String,
 }
 
 // ── Ollama response shape ───────────────────────────────────────────
@@ -90,6 +101,7 @@ pub async fn chat_send(app: AppHandle, request: ChatRequest) -> Result<ChatRespo
     match request.provider.as_str() {
         "openai" => chat_openai(&app, &request).await,
         "ollama" => chat_ollama(&request).await,
+        "lmstudio" => chat_lmstudio(&request).await,
         other => Err(format!("Unsupported provider: {}", other)),
     }
 }
@@ -158,6 +170,70 @@ async fn chat_openai(app: &AppHandle, request: &ChatRequest) -> Result<ChatRespo
             content,
         },
         provider: "openai".into(),
+        model: request.model.clone(),
+        usage,
+        error: None,
+    })
+}
+
+async fn chat_lmstudio(request: &ChatRequest) -> Result<ChatResponse, String> {
+    let endpoint = request.api_base
+        .clone()
+        .unwrap_or_else(|| "http://localhost:1234/v1".to_string());
+
+    let url = format!("{}/chat/completions", endpoint.trim_end_matches('/'));
+
+    let messages: Vec<serde_json::Value> = request.messages.iter().map(|m| {
+        serde_json::json!({
+            "role": m.role,
+            "content": m.content,
+        })
+    }).collect();
+
+    let body = serde_json::json!({
+        "model": request.model,
+        "messages": messages,
+    });
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(120))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let response = client
+        .post(&url)
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| format!("LM Studio request failed: {}. Is it running at {}?", e, endpoint))?;
+
+    let status = response.status();
+    let text = response.text().await.map_err(|e| format!("Read response failed: {}", e))?;
+
+    if !status.is_success() {
+        return Err(format!("LM Studio API error ({}): {}", status.as_u16(), text));
+    }
+
+    let parsed: OpenAIResponse = serde_json::from_str(&text)
+        .map_err(|e| format!("Parse LM Studio response failed: {}", e))?;
+
+    let content = parsed.choices.first()
+        .and_then(|c| c.message.content.clone())
+        .unwrap_or_default();
+
+    let usage = parsed.usage.map(|u| ChatUsage {
+        prompt_tokens: u.prompt_tokens,
+        completion_tokens: u.completion_tokens,
+        total_tokens: u.total_tokens,
+    });
+
+    Ok(ChatResponse {
+        message: ChatMessage {
+            role: "assistant".into(),
+            content,
+        },
+        provider: "lmstudio".into(),
         model: request.model.clone(),
         usage,
         error: None,
@@ -240,6 +316,33 @@ pub async fn test_ollama_connection(endpoint: Option<String>) -> Result<bool, St
     match client.get(&url).send().await {
         Ok(resp) => Ok(resp.status().is_success()),
         Err(_) => Ok(false),
+    }
+}
+
+#[tauri::command]
+pub async fn lmstudio_list_models(endpoint: Option<String>) -> Result<Vec<String>, String> {
+    let base = endpoint.unwrap_or_else(|| "http://localhost:1234/v1".to_string());
+    let url = format!("{}/models", base.trim_end_matches('/'));
+    
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    match client.get(&url).send().await {
+        Ok(res) => {
+            if res.status().is_success() {
+                let text = res.text().await.unwrap_or_default();
+                if let Ok(parsed) = serde_json::from_str::<OpenAIModelsResponse>(&text) {
+                    Ok(parsed.data.into_iter().map(|m| m.id).collect())
+                } else {
+                    Err("Failed to parse LM Studio /models JSON".to_string())
+                }
+            } else {
+                Err(format!("Status: {}", res.status()))
+            }
+        },
+        Err(e) => Err(format!("Connection failed: {}", e))
     }
 }
 

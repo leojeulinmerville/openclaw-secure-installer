@@ -1,21 +1,25 @@
 import { useState, useEffect, useRef } from 'react';
-import { chatSend, testOllamaConnection, hasSecret } from '../lib/tauri';
+import { chatSend, testOllamaConnection, hasSecret, ollamaListModels, lmstudioListModels } from '../lib/tauri';
 import type { ChatMessage } from '../types';
 import {
   Send, Bot, User, Loader2, AlertCircle, Wifi, WifiOff,
-  Key, Server, CheckCircle2, XCircle, RefreshCw
+  Key, Server, CheckCircle2, XCircle, RefreshCw, Cpu
 } from 'lucide-react';
 import { useDesktop } from '../contexts/DesktopContext';
 
 const OPENAI_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo'];
-const OLLAMA_MODELS = ['llama3', 'llama3.1', 'mistral', 'codellama', 'gemma2'];
+const DEFAULT_OLLAMA_MODELS = ['llama3', 'llama3.1', 'mistral', 'codellama', 'gemma2'];
 
 export default function Chat() {
   const { isGatewayReady, allowInternet, refresh } = useDesktop();
   
-  const [provider, setProvider] = useState<'openai' | 'ollama'>('ollama');
-  const [model, setModel] = useState('llama3');
+  const [provider, setProvider] = useState<'openai' | 'ollama' | 'lmstudio'>('ollama');
+  const [model, setModel] = useState('');
+  const [availableModels, setAvailableModels] = useState<string[]>(DEFAULT_OLLAMA_MODELS);
+  
   const [ollamaEndpoint, setOllamaEndpoint] = useState('http://localhost:11434');
+  const [lmstudioEndpoint, setLmstudioEndpoint] = useState('http://localhost:1234/v1');
+  
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,6 +28,7 @@ export default function Chat() {
   // Additional local security checks
   const [hasApiKey, setHasApiKey] = useState(false);
   const [ollamaOk, setOllamaOk] = useState(false);
+  const [lmstudioOk, setLmstudioOk] = useState(false);
   const [checking, setChecking] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -31,12 +36,11 @@ export default function Chat() {
   const checkLocalStatus = async () => {
     setChecking(true);
     try {
-      // Refresh global context first
       await refresh();
       
       const [apiKey, ollama] = await Promise.all([
         hasSecret('OPENAI_API_KEY').catch(() => false),
-        testOllamaConnection().catch(() => false),
+        testOllamaConnection(ollamaEndpoint).catch(() => false),
       ]);
       setHasApiKey(apiKey);
       setOllamaOk(ollama);
@@ -47,7 +51,50 @@ export default function Chat() {
 
   useEffect(() => {
     checkLocalStatus();
-  }, []);
+  }, [ollamaEndpoint]);
+
+  // Fetch dynamic models when provider or endpoints change
+  useEffect(() => {
+    let active = true;
+    if (provider === 'openai') {
+      setAvailableModels(OPENAI_MODELS);
+      setModel(OPENAI_MODELS[0]);
+    } else if (provider === 'ollama') {
+      ollamaListModels(ollamaEndpoint).then(models => {
+        if (!active) return;
+        if (models && models.length > 0) {
+          setAvailableModels(models);
+          setModel(models[0]);
+        } else {
+          setAvailableModels(DEFAULT_OLLAMA_MODELS);
+          setModel(DEFAULT_OLLAMA_MODELS[0]);
+        }
+      }).catch(() => {
+        if (!active) return;
+        setAvailableModels(DEFAULT_OLLAMA_MODELS);
+        setModel(DEFAULT_OLLAMA_MODELS[0]);
+      });
+    } else if (provider === 'lmstudio') {
+      lmstudioListModels(lmstudioEndpoint).then(models => {
+        if (!active) return;
+        if (models && models.length > 0) {
+          setLmstudioOk(true);
+          setAvailableModels(models);
+          setModel(models[0]);
+        } else {
+          setLmstudioOk(false);
+          setAvailableModels(['No models found']);
+          setModel('No models found');
+        }
+      }).catch(() => {
+        if (!active) return;
+        setLmstudioOk(false);
+        setAvailableModels(['Connection failed']);
+        setModel('Connection failed');
+      });
+    }
+    return () => { active = false; };
+  }, [provider, ollamaEndpoint, lmstudioEndpoint]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -55,7 +102,7 @@ export default function Chat() {
 
   const canChat =
     isGatewayReady &&
-    (provider === 'ollama' ? ollamaOk : allowInternet && hasApiKey);
+    (provider === 'ollama' ? ollamaOk : provider === 'lmstudio' ? lmstudioOk : allowInternet && hasApiKey);
 
   const handleSend = async () => {
     if (!input.trim() || loading || !canChat) return;
@@ -73,6 +120,7 @@ export default function Chat() {
         model,
         messages: newMessages,
         ollamaEndpoint: provider === 'ollama' ? ollamaEndpoint : undefined,
+        apiBase: provider === 'lmstudio' ? lmstudioEndpoint : undefined,
       });
       setMessages([...newMessages, response.message]);
     } catch (e) {
@@ -120,6 +168,9 @@ export default function Chat() {
             {provider === 'ollama' && (
               <StatusCheck ok={ollamaOk} label="Ollama" />
             )}
+            {provider === 'lmstudio' && (
+              <StatusCheck ok={lmstudioOk} label="LM Studio API" />
+            )}
           </div>
           <button onClick={checkLocalStatus} disabled={checking} className="glass-button text-xs flex items-center gap-1.5">
             {checking ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
@@ -133,19 +184,25 @@ export default function Chat() {
         <div className="flex gap-3">
           <div className="flex-1">
             <label className="text-xs text-white/40 block mb-1">Provider</label>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               <button
-                onClick={() => { setProvider('ollama'); setModel('llama3'); }}
+                onClick={() => setProvider('ollama')}
                 className={`glass-button text-sm flex items-center gap-1.5 ${provider === 'ollama' ? 'ring-1 ring-cyan-400/40 bg-cyan-500/10' : ''}`}
               >
-                <Server className="w-3.5 h-3.5" /> Ollama (Local)
+                <Server className="w-3.5 h-3.5" /> Ollama
               </button>
               <button
-                onClick={() => { setProvider('openai'); setModel('gpt-4o-mini'); }}
+                onClick={() => setProvider('lmstudio')}
+                className={`glass-button text-sm flex items-center gap-1.5 ${provider === 'lmstudio' ? 'ring-1 ring-cyan-400/40 bg-cyan-500/10' : ''}`}
+              >
+                <Cpu className="w-3.5 h-3.5" /> LM Studio
+              </button>
+              <button
+                onClick={() => setProvider('openai')}
                 className={`glass-button text-sm flex items-center gap-1.5 ${provider === 'openai' ? 'ring-1 ring-cyan-400/40 bg-cyan-500/10' : ''}`}
               >
                 {allowInternet ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-                OpenAI (Cloud)
+                OpenAI
               </button>
             </div>
           </div>
@@ -156,7 +213,7 @@ export default function Chat() {
               onChange={e => setModel(e.target.value)}
               className="glass-input text-sm w-full"
             >
-              {(provider === 'openai' ? OPENAI_MODELS : OLLAMA_MODELS).map(m => (
+              {availableModels.map(m => (
                 <option key={m} value={m}>{m}</option>
               ))}
             </select>
@@ -165,13 +222,26 @@ export default function Chat() {
 
         {provider === 'ollama' && (
           <div>
-            <label className="text-xs text-white/40 block mb-1">Ollama endpoint</label>
+            <label className="text-xs text-white/40 block mb-1">Ollama API URL</label>
             <input
               type="text"
               value={ollamaEndpoint}
               onChange={e => setOllamaEndpoint(e.target.value)}
               className="glass-input text-sm font-mono"
               placeholder="http://localhost:11434"
+            />
+          </div>
+        )}
+
+        {provider === 'lmstudio' && (
+          <div>
+            <label className="text-xs text-white/40 block mb-1">LM Studio API URL</label>
+            <input
+              type="text"
+              value={lmstudioEndpoint}
+              onChange={e => setLmstudioEndpoint(e.target.value)}
+              className="glass-input text-sm font-mono"
+              placeholder="http://localhost:1234/v1"
             />
           </div>
         )}
@@ -198,9 +268,9 @@ export default function Chat() {
             <Bot className="w-12 h-12 text-white/10 mb-3" />
             <p className="text-white/20 text-sm">Start a conversation.</p>
             <p className="text-white/10 text-xs mt-1">
-              {provider === 'ollama'
-                ? 'Messages stay local — Ollama runs on your machine.'
-                : 'OpenAI messages are sent over the internet.'}
+              {provider === 'openai'
+                ? 'OpenAI messages are sent over the internet.'
+                : 'Messages stay local — models run securely on your machine.'}
             </p>
           </div>
         )}
