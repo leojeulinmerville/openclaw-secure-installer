@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getAgentDetail, startAgent, stopAgent, restartAgent, removeAgent,
   agentLogs, agentStats, agentSetNetwork, quarantineAgent, unquarantineAgent,
@@ -22,47 +22,71 @@ export default function AgentDetail({ agentId, onNavigate }: Props) {
   const [loading, setLoading] = useState('');
   const [error, setError] = useState('');
   const [confirmRemove, setConfirmRemove] = useState(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const refresh = useCallback(async () => {
     try {
       const a = await getAgentDetail(agentId);
-      setAgent(a);
+      if (mountedRef.current) setAgent(a);
     } catch (e) {
-      setError(String(e));
+      if (mountedRef.current) setError(String(e));
     }
   }, [agentId]);
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Auto-refresh when on logs or metrics tab
+  // Single polling effect — guarded by visibility and mounted ref
   useEffect(() => {
     if (!agent) return;
-    const interval = setInterval(async () => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const poll = async () => {
+      if (!mountedRef.current || document.visibilityState !== 'visible') return;
+
+      // Tabs-specific polling
       if (tab === 'logs') {
-        try { setLogs(await agentLogs(agentId, 200)); } catch { /* */ }
+        try {
+          const l = await agentLogs(agentId, 200);
+          if (mountedRef.current) setLogs(l);
+        } catch { /* ignore */ }
+      } else if (tab === 'metrics') {
+        try {
+          const s = await agentStats(agentId);
+          if (mountedRef.current) setStats(s);
+        } catch { /* ignore */ }
       }
-      if (tab === 'metrics') {
-        try { setStats(await agentStats(agentId)); } catch { /* */ }
-      }
-      // Always check crash loop for running agents
-      if (agent.status === 'running') {
+
+      // Crash-loop watchdog only for running agents (overview tab); avoid in other tabs
+      if (tab === 'overview' && agent.status === 'running') {
         try {
           const crashed = await checkAgentCrashloop(agentId);
-          if (crashed) refresh();
-        } catch { /* */ }
+          if (crashed && mountedRef.current) refresh();
+        } catch { /* ignore */ }
       }
-    }, 3000);
-    return () => clearInterval(interval);
+    };
+
+    // Fast poll for metrics (5s), slower for logs (6s), slower for overview (8s)
+    const interval = tab === 'metrics' ? 5000 : tab === 'logs' ? 6000 : 8000;
+    intervalId = setInterval(poll, interval);
+
+    return () => {
+      if (intervalId !== null) clearInterval(intervalId);
+    };
   }, [agentId, agent, tab, refresh]);
 
-  // Load tab data on switch
+  // Load initial data on tab switch
   useEffect(() => {
     if (!agent) return;
     if (tab === 'logs') {
-      agentLogs(agentId, 200).then(setLogs).catch(() => setLogs('No logs available'));
+      agentLogs(agentId, 200).then(l => { if (mountedRef.current) setLogs(l); }).catch(() => setLogs('No logs available'));
     }
     if (tab === 'metrics') {
-      agentStats(agentId).then(setStats).catch(() => setStats(null));
+      agentStats(agentId).then(s => { if (mountedRef.current) setStats(s); }).catch(() => setStats(null));
     }
   }, [tab, agent, agentId]);
 
@@ -261,9 +285,9 @@ export default function AgentDetail({ agentId, onNavigate }: Props) {
         {tab === 'logs' && (
           <div className="log-viewer">
             <div className="log-header">
-              <span className="text-muted">Last 200 lines · auto-refreshes every 3s</span>
+              <span className="text-muted">Last 200 lines · auto-refreshes every 6s</span>
               <button className="btn btn-ghost btn-small"
-                onClick={() => agentLogs(agentId, 200).then(setLogs).catch(() => {})}>
+                onClick={() => agentLogs(agentId, 200).then(l => { if (mountedRef.current) setLogs(l); }).catch(() => {})}>
                 Refresh
               </button>
             </div>
@@ -295,7 +319,7 @@ export default function AgentDetail({ agentId, onNavigate }: Props) {
               <span className="metric-value">{stats?.running ? 'Running' : 'Stopped'}</span>
             </div>
             <p className="text-muted text-small" style={{ gridColumn: '1 / -1' }}>
-              Auto-refreshes every 3 seconds when agent is running.
+              Auto-refreshes every 5 seconds when visible.
             </p>
           </div>
         )}

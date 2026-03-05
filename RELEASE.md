@@ -22,15 +22,16 @@ for Windows, plus the companion gateway Docker image.
 ## 1. Build the Desktop Installer (Local)
 
 ```powershell
-# Install dependencies
-pnpm --filter ./desktop... install
+# Install dependencies (desktop workspace only — avoids EISDIR on monorepo root)
+pnpm --filter openclaw-secure-installer-desktop... install
 
-# Run tests first
+# Run tests first (from repo root or specify manifest path)
 cargo test --manifest-path desktop/src-tauri/Cargo.toml
 
 # Build the release installer (MSI + NSIS exe)
 pnpm -C desktop tauri:build
 ```
+
 
 ### Where to find the artifacts
 

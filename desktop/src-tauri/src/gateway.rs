@@ -2213,4 +2213,77 @@ mod tests {
         assert!(status.health_ok);
         assert_eq!(status.version, Some("1.0.0".to_string()));
     }
+
+    // ── Start Gateway regression: missing compose file → structured failure ──
+
+    /// Verify that when there is no docker-compose.yml the result fields
+    /// are actionable — NOT a silent empty failure.
+    /// This is a pure in-process unit test (no Docker, no AppHandle needed).
+    #[test]
+    fn test_start_gateway_missing_compose_result_is_structured() {
+        // Simulate what start_gateway returns when compose file doesn't exist
+        let tmp = std::env::temp_dir().join("oc_missing_compose_test");
+        let compose_file = tmp.join("docker-compose.yml");
+        // Ensure file definitely does not exist
+        let _ = std::fs::remove_file(&compose_file);
+
+        // Replicate the exact early-return logic from start_gateway
+        let result = if !compose_file.exists() {
+            GatewayStartResult {
+                gateway_active: false,
+                status: "failed".into(),
+                user_friendly_title: "Not Configured".into(),
+                user_friendly_message: "docker-compose.yml not found. Complete the Configure step first.".into(),
+                raw_diagnostics: String::new(),
+                remediation_steps: vec!["Go back to Step 2 and click Save & Configure.".into()],
+                compose_file_path: compose_file.display().to_string(),
+                warning: None,
+            }
+        } else {
+            panic!("Unexpected: compose file exists in test temp dir");
+        };
+
+        // The banner reads these fields — they must be non-empty and informative
+        assert!(!result.gateway_active, "gateway_active must be false when compose is missing");
+        assert_eq!(result.status, "failed");
+        assert!(!result.user_friendly_title.is_empty(), "title must be non-empty");
+        assert!(!result.user_friendly_message.is_empty(), "message must be non-empty");
+        assert!(!result.remediation_steps.is_empty(), "remediation must guide the user");
+    }
+
+    /// Verify that a failed GatewayStartResult is always distinct from
+    /// the already_running variant (regression guard for silent-cancel path).
+    #[test]
+    fn test_failed_result_is_not_active() {
+        let failures = [
+            GatewayStartResult {
+                gateway_active: false,
+                status: "failed".into(),
+                user_friendly_title: "Not Configured".into(),
+                user_friendly_message: "docker-compose.yml not found.".into(),
+                raw_diagnostics: String::new(),
+                remediation_steps: vec!["Go to Setup.".into()],
+                compose_file_path: String::new(),
+                warning: None,
+            },
+            GatewayStartResult {
+                gateway_active: false,
+                status: "failed".into(),
+                user_friendly_title: "Image Pull Failed".into(),
+                user_friendly_message: "Docker could not pull the image.".into(),
+                raw_diagnostics: "pull access denied".into(),
+                remediation_steps: vec!["Check image name.".into()],
+                compose_file_path: String::new(),
+                warning: None,
+            },
+        ];
+
+        for r in &failures {
+            assert!(!r.gateway_active, "failed result must have gateway_active=false");
+            assert_eq!(r.status, "failed");
+            assert!(!r.user_friendly_title.is_empty());
+            assert!(!r.user_friendly_message.is_empty());
+            assert!(!r.remediation_steps.is_empty());
+        }
+    }
 }

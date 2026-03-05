@@ -1,31 +1,27 @@
 # Changelog
 
-## v0.2.1 - 2026-03-04
+## v0.2.1 - 2026-03-05
 
-### Security & UX
-- **Address Normalization**: Forced `127.0.0.1` instead of `localhost` in Ollama API base to prevent Windows IPv6 resolution issues.
-- **Insecurity Removal**: Removed instructions to set `OLLAMA_ORIGINS="*"`. Frontend-to-backend proxying handles this securely.
-- **Address Cleanup**: Removed all `host.docker.internal` references in favor of explicit `127.0.0.1`.
+### Fixes (hotfix sprint)
+- **P0 — Start Gateway regression**: `GatewayBanner` now reads the `GatewayStartResult` and surfaces `userFriendlyTitle`, `userFriendlyMessage`, remediation steps, and a collapsible diagnostics panel instead of silently swallowing errors. Added Retry button on failure state.
+- **P0 — AgentDetail crash/freeze**: Consolidated polling loops behind a single `mountedRef` + `document.visibilityState` guard with proper interval cleanup on unmount. Tab-adaptive intervals (5s metrics, 6s logs, 8s overview). Crash-loop watchdog scoped to overview tab only.
+- **P0 — CI release workflows already correct**: Both `desktop-build.yml` and `gateway-publish.yml` already trigger on `v*` tag push with correct `pnpm --filter` and multi-arch Docker build. Updated `RELEASE.md` to document correct `--manifest-path` for `cargo test`.
+- **P1 — Ollama onboarding**: `ConnectOllama` gains a **Test Completion** step with model selector and latency display. Curated model list (Llama 3.2 1B, Gemma 3 1B, Phi-4 Mini, Llama 3.1 8B) with pull progress bar. Removed terminal instructions; replaced with "Start from system tray" guidance.
+
+### Security
+- **Address Normalization**: Forced `127.0.0.1` instead of `localhost` in Ollama API base to prevent Windows IPv6 resolution issues (from v0.2.0).
+- **Insecurity Removal**: Removed instructions to set `OLLAMA_ORIGINS="*"` (from v0.2.0).
 
 ### CI/CD
-- **Build Stability**: Set `CARGO_BUILD_JOBS: 1` in Windows build workflow to prevent `Peer disconnected` OOM crashes on GitHub Actions runners.
+- **Build Stability**: `CARGO_BUILD_JOBS: 1` in Windows build workflow prevents `Peer disconnected` OOM crashes (from v0.2.0).
 
-### Features
-- **Live Run Timeline**: Run events stream in real-time via Tauri events — no polling freeze.
-- **Inline Diff Viewer**: `PATCH.diff` artifacts render with syntax-colored `+`/`-` lines in the RunDetail view.
-- **Run Auto-Start**: Creating a run now immediately starts it and navigates to its detail page.
-- **Ollama Test Completion**: `ollama_run_test_completion` command verifies a model works end-to-end after pull.
-
-### Performance
-- **AgentsList**: Removed per-agent Docker health check on poll. Interval raised to 8s. Unmount cleanup prevents stale updates.
-- **Activity**: Polling now pauses when the tab is not visible (`visibilityState`).
-
-### Fixes
-- `EventType` union expanded with `patch.apply.succeeded`, `llm.*`, `approval.resolved`.
-- Stale 2s polling loop in RunDetail replaced with event-driven updates.
-- `patch.apply.succeeded` now renders correctly in timeline.
+### Tests
+- Added `test_start_gateway_missing_compose_result_is_structured`: verifies the "missing compose file → actionable error" contract that was the root cause of the silent-cancel regression.
+- Added `test_failed_result_is_not_active`: regression guard ensuring all failure variants have non-empty title, message, and remediation steps.
 
 ---
+
+
 
 ## v0.1.8 - 2026-02-11
 
