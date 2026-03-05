@@ -147,6 +147,61 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  // ── Auth Bootstrap (Desktop Integration) ────────────────────────
+  if (path === "/api/v1/local-auth/bootstrap" || path === "/api/v1/auth/bootstrap") {
+    const token = url.searchParams.get("token");
+    const expectedToken = process.env.OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN;
+    
+    if (expectedToken && token !== expectedToken) {
+      json(res, 401, { error: "unauthorized" });
+      log("warn", `Auth bootstrap failed: invalid token`);
+      return;
+    }
+    
+    const nextPath = url.searchParams.get("next") || "/";
+    const redirectUrl = nextPath.startsWith("/") ? nextPath : "/" + nextPath;
+    
+    res.writeHead(302, {
+      "Set-Cookie": "openclaw_local_session=mvp-mock-session; Path=/; HttpOnly; SameSite=Strict",
+      "Cache-Control": "no-store",
+      "Location": redirectUrl
+    });
+    res.end();
+    log("info", `Auth bootstrap success, redirecting to ${redirectUrl}`);
+    return;
+  }
+
+  // ── Control UI Placeholder ──────────────────────────────────────
+  if (path.startsWith("/ui") || path.startsWith("/console") || path.startsWith("/openclaw")) {
+    res.writeHead(200, { "Content-Type": "text/html" });
+    res.end(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>OpenClaw MVP</title>
+        <style>
+          body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+          .card { background: #1e293b; padding: 2.5rem; border-radius: 12px; border: 1px solid #334155; text-align: center; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+          h1 { margin-top: 0; color: #38bdf8; margin-bottom: 0.5rem; }
+          p { color: #94a3b8; line-height: 1.5; margin: 0; }
+          .badge { display: inline-block; background: #064e3b; color: #34d399; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.875rem; font-weight: 500; margin-bottom: 1.5rem; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge">API Online</div>
+          <h1>OpenClaw Gateway</h1>
+          <p>The minimal API gateway is running securely.</p>
+          <p style="font-size: 0.875rem; margin-top: 1.5rem; opacity: 0.7;">Native desktop features are enabled via Mission Control.</p>
+        </div>
+      </body>
+      </html>
+    `);
+    log("info", `Served UI placeholder for ${path}`);
+    return;
+  }
+
+
   // ── Events ──────────────────────────────────────────────────────
   if (path === "/api/v1/events") {
     if (method === "GET") {
