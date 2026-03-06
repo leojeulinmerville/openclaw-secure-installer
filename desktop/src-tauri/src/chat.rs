@@ -3,7 +3,7 @@ use tauri::AppHandle;
 
 use crate::gateway::ensure_gateway_ready;
 use crate::secrets::get_secret_internal;
-use crate::state_manager::load_state;
+use crate::state_manager::{get_app_data_dir, load_state};
 
 // ── Types ───────────────────────────────────────────────────────────
 
@@ -316,9 +316,7 @@ pub struct ChatSession {
 }
 
 fn get_chats_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
-    let mut path = app.path_resolver()
-        .app_data_dir()
-        .ok_or_else(|| "Failed to get app data dir".to_string())?;
+    let mut path = get_app_data_dir(app)?;
     path.push("chats");
     if !path.exists() {
         std::fs::create_dir_all(&path).map_err(|e| format!("Failed to create chats directory: {}", e))?;

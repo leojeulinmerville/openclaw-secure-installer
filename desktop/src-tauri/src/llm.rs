@@ -268,8 +268,9 @@ impl LlmClient {
             let res = req.send().await?;
 
             if !res.status().is_success() {
+                 let status = res.status();
                  let err_text = res.text().await?;
-                 return Err(format!("LM Studio API Error ({}): {}", res.status(), err_text).into());
+                 return Err(format!("LM Studio API Error ({}): {}", status, err_text).into());
             }
 
             let response: OpenAIResponse = res.json().await?;

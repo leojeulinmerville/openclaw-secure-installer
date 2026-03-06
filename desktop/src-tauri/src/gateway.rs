@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::path::Path;
-use std::sync::{Mutex, OnceLock};
-// use std::process::Command;
+
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::secrets::{get_secret_internal, set_secret_internal};

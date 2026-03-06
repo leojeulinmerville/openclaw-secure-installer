@@ -1,7 +1,5 @@
 use serde::Serialize;
-use std::io::ErrorKind;
 use std::path::Path;
-use std::process::Command;
 
 const MAX_OUTPUT_CHARS: usize = 8 * 1024;
 
