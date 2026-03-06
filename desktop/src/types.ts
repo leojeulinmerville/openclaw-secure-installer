@@ -434,3 +434,11 @@ export interface ChatUsage {
   completionTokens: number | null;
   totalTokens: number | null;
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  messages: ChatMessage[];
+}

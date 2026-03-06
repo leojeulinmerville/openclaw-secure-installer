@@ -68,6 +68,10 @@ fn main() {
         chat::chat_send,
         chat::test_ollama_connection,
         chat::lmstudio_list_models,
+        chat::list_chats,
+        chat::get_chat,
+        chat::save_chat,
+        chat::delete_chat,
         llm::ollama_test,
         llm::ollama_list_models,
         llm::ollama_pull_model,
@@ -80,6 +84,7 @@ fn main() {
         runs::start_run,
         runs::submit_approval,
         runs::read_workspace_file,
+        runs::delete_run,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

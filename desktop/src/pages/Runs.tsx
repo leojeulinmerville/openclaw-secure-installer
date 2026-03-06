@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { listRuns } from '../lib/tauri';
+import { listRuns, deleteRun, safeFormatDistanceToNow } from '../lib/tauri';
 import type { Run } from '../types';
-import { Play, Clock, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
+import { Play, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, Trash2 } from 'lucide-react';
 
 interface RunsProps {
   onNavigate: (page: 'run-detail' | 'create-run', runId?: string) => void;
@@ -25,6 +24,17 @@ export function Runs({ onNavigate }: RunsProps) {
       console.error('Failed to list runs', e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (e: React.MouseEvent, runId: string) => {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this run?')) return;
+    try {
+      await deleteRun(runId);
+      await loadRuns();
+    } catch (err) {
+      alert('Failed to delete run: ' + err);
     }
   };
 
@@ -95,12 +105,21 @@ export function Runs({ onNavigate }: RunsProps) {
                 <p className="text-xs text-white/40 truncate">{run.user_goal}</p>
               </div>
 
-              <div className="text-right shrink-0">
+              <div className="text-right shrink-0 flex flex-col items-end justify-between">
                 <div className="text-xs font-mono text-white/30">
-                  {formatDistanceToNow(new Date(run.created_at), { addSuffix: true })}
+                  {safeFormatDistanceToNow(run.created_at)}
                 </div>
-                <div className="text-xs text-white/20 mt-1 capitalize group-hover:text-cyan-300 transition-colors">
-                  {run.status} &rarr;
+                <div className="flex items-center gap-3 mt-1">
+                  <button
+                    onClick={(e) => handleDelete(e, run.id)}
+                    className="text-white/20 hover:text-red-400 transition-colors p-1"
+                    title="Delete Run"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                  <div className="text-xs text-white/20 capitalize group-hover:text-cyan-300 transition-colors">
+                    {run.status} &rarr;
+                  </div>
                 </div>
               </div>
             </div>

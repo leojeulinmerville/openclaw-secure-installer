@@ -204,21 +204,27 @@ export function Connections() {
 
   return (
     <div className="h-full p-5 space-y-4">
-      <div className="glass-panel p-4 flex flex-wrap items-center gap-3">
-        <div>
-          <h2 className="text-lg font-bold text-white">Connections</h2>
-          <p className="text-xs text-white/50">
-            Runtime-driven setup for channels and providers. Advanced flows stay in OpenClaw Console.
-          </p>
+      <div className="glass-panel p-4 flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-white">Connections</h2>
+            <p className="text-xs text-white/50">
+              Runtime-driven setup for channels and providers.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => void load()} className="glass-button text-sm">
+              <RefreshCcw className="w-4 h-4" />
+            </button>
+            <button onClick={() => void openConsoleWindow()} className="glass-button text-sm">
+              <Link2 className="w-4 h-4" />
+              Open Console
+            </button>
+          </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => void load()} className="glass-button text-sm">
-            <RefreshCcw className="w-4 h-4" />
-          </button>
-          <button onClick={() => void openConsoleWindow()} className="glass-button text-sm">
-            <Link2 className="w-4 h-4" />
-            Open Console
-          </button>
+        <div className="bg-white/5 rounded-lg p-3 text-xs text-white/70 border border-white/10 space-y-2">
+          <p><strong>💡 How Plugins Work:</strong> This page dynamically loads fields based on the integrations installed in your Gateway (Node.js engine). To add a service like WhatsApp, Telegram, or Google Places, ensure the corresponding plugin is active in your backend environment.</p>
+          <p><strong>🔒 Access via Tailscale:</strong> Advanced users can connect to their local OpenClaw Gateway remotely using Tailscale (a secure, zero-config VPN). This allows you to interact with your agents over Telegram/WhatsApp from a mobile device without opening router ports to the public internet.</p>
         </div>
       </div>
 

@@ -303,6 +303,92 @@ async fn chat_ollama(request: &ChatRequest) -> Result<ChatResponse, String> {
         error: None,
     })
 }
+// ── Chat Persistence ──────────────────────────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSession {
+    pub id: String,
+    pub title: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub messages: Vec<ChatMessage>,
+}
+
+fn get_chats_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let mut path = app.path_resolver()
+        .app_data_dir()
+        .ok_or_else(|| "Failed to get app data dir".to_string())?;
+    path.push("chats");
+    if !path.exists() {
+        std::fs::create_dir_all(&path).map_err(|e| format!("Failed to create chats directory: {}", e))?;
+    }
+    Ok(path)
+}
+
+#[tauri::command]
+pub async fn list_chats(app: AppHandle) -> Result<Vec<ChatSession>, String> {
+    let dir = get_chats_dir(&app)?;
+    let mut sessions = Vec::new();
+
+    if let Ok(entries) = std::fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            if entry.path().extension().map_or(false, |ext| ext == "json") {
+                if let Ok(content) = std::fs::read_to_string(entry.path()) {
+                    if let Ok(mut session) = serde_json::from_str::<ChatSession>(&content) {
+                        // Empty messages list for listing to save memory
+                        session.messages = vec![];
+                        sessions.push(session);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Sort descending by updated_at
+    sessions.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(sessions)
+}
+
+#[tauri::command]
+pub async fn get_chat(app: AppHandle, id: String) -> Result<ChatSession, String> {
+    let dir = get_chats_dir(&app)?;
+    let path = dir.join(format!("{}.json", id));
+    
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read chat {}: {}", id, e))?;
+        
+    let session = serde_json::from_str::<ChatSession>(&content)
+        .map_err(|e| format!("Failed to parse chat {}: {}", id, e))?;
+        
+    Ok(session)
+}
+
+#[tauri::command]
+pub async fn save_chat(app: AppHandle, session: ChatSession) -> Result<(), String> {
+    let dir = get_chats_dir(&app)?;
+    let path = dir.join(format!("{}.json", session.id));
+    
+    let content = serde_json::to_string_pretty(&session)
+        .map_err(|e| format!("Failed to serialize chat: {}", e))?;
+        
+    std::fs::write(&path, content)
+        .map_err(|e| format!("Failed to write chat to disk: {}", e))?;
+        
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn delete_chat(app: AppHandle, id: String) -> Result<(), String> {
+    let dir = get_chats_dir(&app)?;
+    let path = dir.join(format!("{}.json", id));
+    
+    if path.exists() {
+        std::fs::remove_file(&path).map_err(|e| format!("Failed to delete chat file: {}", e))?;
+    }
+    
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn test_ollama_connection(endpoint: Option<String>) -> Result<bool, String> {

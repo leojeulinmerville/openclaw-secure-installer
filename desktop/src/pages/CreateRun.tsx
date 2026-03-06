@@ -26,8 +26,26 @@ export function CreateRun({ onNavigate }: CreateRunProps) {
         const list = await listAgents();
         setAgents(list);
         if (list.length > 0) {
-          setSelectedAgentId(list[0].id);
-          setWorkspacePath(list[0].workspacePath);
+          const runStr = sessionStorage.getItem('openclaw_rerun');
+          if (runStr) {
+            try {
+              const r = JSON.parse(runStr);
+              setTitle(r.title || '');
+              setGoal(r.goal || '');
+              const matchedAgent = list.find(a => a.id === r.agent_id);
+              if (matchedAgent) {
+                setSelectedAgentId(matchedAgent.id);
+                setWorkspacePath(matchedAgent.workspacePath);
+              } else {
+                setSelectedAgentId(list[0].id);
+                setWorkspacePath(list[0].workspacePath);
+              }
+            } catch (e) {}
+            sessionStorage.removeItem('openclaw_rerun');
+          } else {
+            setSelectedAgentId(list[0].id);
+            setWorkspacePath(list[0].workspacePath);
+          }
         }
       } catch (e) {
         console.error(e);

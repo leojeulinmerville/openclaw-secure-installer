@@ -6,9 +6,10 @@ import {
   deleteSecret,
   testOllamaConnection,
   testGatewayOllamaAccess,
+  lmstudioListModels
 } from '../lib/tauri';
 import {
-  Key, Eye, EyeOff, Check, Trash2, TestTube, Server, Loader2
+  Key, Eye, EyeOff, Check, Trash2, TestTube, Server, Loader2, RefreshCcw
 } from 'lucide-react';
 
 function toErrorMessage(err: unknown): string {
@@ -18,7 +19,13 @@ function toErrorMessage(err: unknown): string {
   return String(err);
 }
 
-export function Providers() {
+import type { Page } from '../types';
+
+interface Props {
+  onNavigate: (page: Page) => void;
+}
+
+export function Providers({ onNavigate }: Props) {
   // ── OpenAI state ──────────────────────────────────────────────────
   const [openaiKeySet, setOpenaiKeySet] = useState(false);
   const [openaiKey, setOpenaiKey] = useState('');
@@ -139,7 +146,10 @@ export function Providers() {
       </div>
 
       {/* ── Ollama ─────────────────────────────────────────────── */}
-      <OllamaWizard />
+      <OllamaWizard onNavigate={onNavigate} />
+
+      {/* ── LM Studio ────────────────────────────────────────────── */}
+      <LMStudioWizard />
 
       {/* ── Container Lifecycle ────────────────────────────────── */}
       <LifecycleSettings />
@@ -197,7 +207,7 @@ function LifecycleSettings() {
   );
 }
 
-function OllamaWizard() {
+function OllamaWizard({ onNavigate }: Props) {
   const [step, setStep] = useState(1); // 1: Intro, 2: Check Local, 3: Check Gateway, 4: Success/Fail
   const [localOk, setLocalOk] = useState(false);
   const [gatewayOk, setGatewayOk] = useState(false);
@@ -267,7 +277,7 @@ function OllamaWizard() {
                    <li>Ollama must allow local connections.</li>
                  </ul>
                </div>
-               <button onClick={() => (window as any).navigate('connect-ollama')} className="glass-button-accent w-full">
+               <button onClick={() => onNavigate('connect-ollama')} className="glass-button-accent w-full">
                  Open Connection Guide
                </button>
              </div>
@@ -332,6 +342,87 @@ function OllamaWizard() {
                    </div>
                 )}
              </div>
+           )}
+        </div>
+    </div>
+  );
+}
+
+function LMStudioWizard() {
+  const [loading, setLoading] = useState(false);
+  const [models, setModels] = useState<string[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const runChecks = async () => {
+    setLoading(true);
+    setErrorMsg('');
+    try {
+      const result = await lmstudioListModels('http://127.0.0.1:1234/v1');
+      if (result && result.length > 0) {
+        setModels(result.map((m: any) => typeof m === 'string' ? m : m.name || m.id));
+      } else {
+        setModels([]);
+        setErrorMsg('LM Studio is reachable but no models are loaded.');
+      }
+    } catch (e) {
+      setErrorMsg(toErrorMessage(e));
+      setModels([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    runChecks();
+  }, []);
+
+  return (
+    <div className="glass-panel p-5 space-y-4">
+       <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-500/15 rounded-lg flex items-center justify-center">
+            <Server className="w-4 h-4 text-blue-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-white">LM Studio Wizard</h3>
+            <p className="text-xs text-white/30">Connect your local LM Studio server.</p>
+          </div>
+          <div className="ml-auto">
+            <button onClick={runChecks} disabled={loading} className="glass-button text-sm">
+                <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-4 mt-4">
+           <div className="text-sm text-white/70 space-y-3">
+             <div className="bg-white/5 p-3 rounded-lg text-xs space-y-2">
+               <p className="font-bold text-white">Instructions:</p>
+               <ul className="list-disc pl-4 space-y-1">
+                 <li>Open LM Studio and go to the <b>Local Server</b> tab.</li>
+                 <li>Start the server on port <b>1234</b>.</li>
+                 <li>Load a model. OpenClaw will detect it automatically.</li>
+               </ul>
+             </div>
+           </div>
+
+           {/* Status Block */}
+           {!loading && errorMsg && (
+             <div className="bg-red-500/10 border border-red-500/20 p-4 rounded-lg text-sm text-white/80 space-y-3 animate-in slide-in-from-top-2">
+               <p className="font-bold text-red-300">LM Studio Server Offline</p>
+               <p className="text-xs font-mono text-red-300/70">{errorMsg.includes('fetch') || errorMsg.includes('Connection failed') || errorMsg.includes('Failed to fetch') ? 'Ensure the server is started inside LM Studio.' : errorMsg}</p>
+             </div>
+           )}
+
+           {!loading && !errorMsg && models.length > 0 && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-lg text-sm text-white/80 animate-in slide-in-from-top-2">
+                <p className="font-bold text-emerald-300 flex items-center gap-2"><Check className="w-4 h-4"/> Connected Successfully</p>
+                <div className="mt-2 pl-6">
+                    <p className="text-xs text-white/50 mb-1">Loaded Models:</p>
+                    <ul className="list-disc text-white text-xs space-y-1">
+                        {models.map(m => <li key={m}>{m}</li>)}
+                    </ul>
+                </div>
+              </div>
            )}
         </div>
     </div>

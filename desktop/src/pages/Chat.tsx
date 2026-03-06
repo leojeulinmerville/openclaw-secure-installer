@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { chatSend, testOllamaConnection, hasSecret, ollamaListModels, lmstudioListModels } from '../lib/tauri';
-import type { ChatMessage } from '../types';
+import { chatSend, testOllamaConnection, hasSecret, ollamaListModels, lmstudioListModels, listChats, getChat, saveChat, deleteChat } from '../lib/tauri';
+import type { ChatMessage, ChatSession } from '../types';
 import {
   Send, Bot, User, Loader2, AlertCircle, Wifi, WifiOff,
-  Key, Server, CheckCircle2, XCircle, RefreshCw, Cpu
+  Key, Server, CheckCircle2, XCircle, RefreshCw, Cpu, Plus, MessageSquare, Trash2
 } from 'lucide-react';
 import { useDesktop } from '../contexts/DesktopContext';
 
@@ -24,6 +24,10 @@ export default function Chat() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Chat History State
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   // Additional local security checks
   const [hasApiKey, setHasApiKey] = useState(false);
@@ -49,8 +53,18 @@ export default function Chat() {
     }
   };
 
+  const loadSessions = async () => {
+    try {
+      const data = await listChats();
+      setSessions(data);
+    } catch (e) {
+      console.error('Failed to load chats', e);
+    }
+  };
+
   useEffect(() => {
     checkLocalStatus();
+    loadSessions();
   }, [ollamaEndpoint]);
 
   // Fetch dynamic models when provider or endpoints change
@@ -106,6 +120,37 @@ export default function Chat() {
     isGatewayReady &&
     (provider === 'ollama' ? ollamaOk : provider === 'lmstudio' ? lmstudioOk : allowInternet && hasApiKey);
 
+  const handleNewChat = () => {
+    setActiveSessionId(null);
+    setMessages([]);
+    setError(null);
+  };
+
+  const handleSelectSession = async (id: string) => {
+    try {
+      const session = await getChat(id);
+      setActiveSessionId(session.id);
+      setMessages(session.messages);
+      setError(null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!confirm('Delete this chat?')) return;
+    try {
+      await deleteChat(id);
+      if (activeSessionId === id) {
+        handleNewChat();
+      }
+      loadSessions();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   const handleSend = async () => {
     if (!input.trim() || loading || !canChat) return;
 
@@ -124,7 +169,26 @@ export default function Chat() {
         ollamaEndpoint: provider === 'ollama' ? ollamaEndpoint : undefined,
         apiBase: provider === 'lmstudio' ? lmstudioEndpoint : undefined,
       });
-      setMessages([...newMessages, response.message]);
+      
+      const finalMessages = [...newMessages, response.message];
+      setMessages(finalMessages);
+
+      // Persist to disk
+      const sessionId = activeSessionId || crypto.randomUUID();
+      const title = activeSessionId ? (sessions.find(s => s.id === activeSessionId)?.title || userMsg.content.slice(0, 30)) : userMsg.content.slice(0, 30);
+      
+      const newSession: ChatSession = {
+        id: sessionId,
+        title: title + (title.length >= 30 ? '...' : ''),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        messages: finalMessages,
+      };
+
+      await saveChat(newSession);
+      if (!activeSessionId) setActiveSessionId(sessionId);
+      await loadSessions();
+
     } catch (e) {
       setError(String(e));
     } finally {
@@ -143,18 +207,55 @@ export default function Chat() {
   );
 
   return (
-    <div className="chat-page">
-      <div className="chat-header">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/20">
-            <Bot className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-white">Chat</h2>
-            <p className="text-xs text-white/30">Talk with AI — securely, through the gateway</p>
-          </div>
+    <div className="flex h-full gap-4">
+      {/* Sidebar */}
+      <div className="w-64 flex-shrink-0 flex flex-col gap-4">
+        <button 
+          onClick={handleNewChat}
+          className="glass-button-accent flex items-center justify-center gap-2 py-3"
+        >
+          <Plus className="w-4 h-4" /> New Chat
+        </button>
+
+        <div className="glass-panel flex-1 overflow-y-auto p-2 space-y-1 custom-scroll">
+          {sessions.length === 0 && (
+            <div className="text-center p-4 text-white/30 text-sm">No recent chats</div>
+          )}
+          {sessions.map(session => (
+            <div 
+              key={session.id}
+              onClick={() => handleSelectSession(session.id)}
+              className={`group flex items-center justify-between p-3 rounded-lg cursor-pointer transition-colors ${activeSessionId === session.id ? 'bg-white/10' : 'hover:bg-white/5'}`}
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <MessageSquare className={`w-4 h-4 shrink-0 ${activeSessionId === session.id ? 'text-cyan-400' : 'text-white/40'}`} />
+                <span className="text-sm text-white/80 truncate">{session.title}</span>
+              </div>
+              <button 
+                onClick={(e) => handleDeleteSession(e, session.id)}
+                className="opacity-0 group-hover:opacity-100 p-1.5 text-white/30 hover:text-red-400 hover:bg-white/10 rounded transition-all"
+                title="Delete Chat"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
         </div>
       </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col chat-page min-w-0">
+        <div className="chat-header shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 bg-gradient-to-br from-violet-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-violet-500/20">
+              <Bot className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Chat</h2>
+              <p className="text-xs text-white/30">Talk with AI — securely, through the gateway</p>
+            </div>
+          </div>
+        </div>
 
       {/* Security Status Bar */}
       <div className="glass-panel p-3 mb-4">
@@ -331,6 +432,7 @@ export default function Chat() {
           Send
         </button>
       </div>
+     </div>
     </div>
   );
 }

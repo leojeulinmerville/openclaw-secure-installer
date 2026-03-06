@@ -44,6 +44,7 @@ pub struct RunEvent {
     pub id: String,
     pub run_id: String,
     pub timestamp: String,
+    #[serde(rename = "type")]
     pub event_type: String, // "type" is reserved in Rust, so we map it or use rename
     pub payload: serde_json::Value,
 }
@@ -429,6 +430,15 @@ pub async fn submit_approval(app: AppHandle, run_id: String, approval_id: String
     }
 
     Ok(run)
+}
+#[tauri::command]
+pub async fn delete_run(app: AppHandle, run_id: String) -> Result<(), String> {
+    let runs_dir = get_runs_dir(&app).map_err(|e| e.to_string())?;
+    let run_path = runs_dir.join(&run_id);
+    if run_path.exists() {
+        fs::remove_dir_all(run_path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

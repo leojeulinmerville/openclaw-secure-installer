@@ -39,7 +39,7 @@ function AppContent() {
       case 'overview':      return <Overview />;
       case 'console':       return <Console />;
       case 'connections':   return <Connections />;
-      case 'providers':     return <Providers />;
+      case 'providers':     return <Providers onNavigate={navigate} />;
       case 'agents':        return <AgentsList onNavigate={navigate} />;
       case 'create-agent':  return <CreateAgent onNavigate={navigate} />;
       case 'agent-detail':

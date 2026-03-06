@@ -250,6 +250,33 @@ impl LlmClient {
             
             Ok((response.message.content, usage))
 
+        } else if self.provider == "lmstudio" {
+            let base = self.api_base.clone().unwrap_or_else(|| "http://127.0.0.1:1234/v1".to_string());
+            let url = format!("{}/chat/completions", base.trim_end_matches('/'));
+
+            let body = OpenAIRequest {
+                model: self.model.clone(),
+                messages,
+                temperature: 0.0,
+            };
+
+            let mut req = client.post(&url).json(&body);
+            if let Some(key) = &self.api_key {
+                req = req.bearer_auth(key);
+            }
+
+            let res = req.send().await?;
+
+            if !res.status().is_success() {
+                 let err_text = res.text().await?;
+                 return Err(format!("LM Studio API Error ({}): {}", res.status(), err_text).into());
+            }
+
+            let response: OpenAIResponse = res.json().await?;
+            let content = response.choices.first().map(|c| c.message.content.clone()).unwrap_or_default();
+            
+            Ok((content, response.usage))
+
         } else {
             Err(format!("Unsupported provider: {}", self.provider).into())
         }

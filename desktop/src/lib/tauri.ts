@@ -1,6 +1,7 @@
 // Typed wrappers around Tauri invoke calls.
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-shell';
+import { formatDistanceToNow } from 'date-fns';
 import type {
   CheckDockerResult,
   InstallerState,
@@ -21,6 +22,7 @@ import type {
   ConnectionsStatusResponse,
   ConnectionKind,
   ConnectionOperationResult,
+  ChatSession,
 } from '../types';
 
 // ── Docker ──────────────────────────────────────────────────────────
@@ -126,6 +128,11 @@ export const getAgentDetail = (agentId: string) =>
 export const chatSend = (request: ChatRequest) =>
   invoke<ChatResponse>('chat_send', { request });
 
+export const listChats = () => invoke<ChatSession[]>('list_chats');
+export const getChat = (id: string) => invoke<ChatSession>('get_chat', { id });
+export const saveChat = (session: ChatSession) => invoke<void>('save_chat', { session });
+export const deleteChat = (id: string) => invoke<void>('delete_chat', { id });
+
 export const testOllamaConnection = (endpoint?: string) =>
   invoke<boolean>('test_ollama_connection', { endpoint });
 
@@ -150,6 +157,31 @@ export const createRun = (
   workspacePath: string
 ) => invoke<Run>('create_run', { request: { agentId, provider, model, title, userGoal, workspacePath } });
 
+export const listModels = () => invoke<string[]>('list_models');
+
+// ── Shared Helpers ──────────────────────────────────────────────────
+export function safeFormatDistanceToNow(dateStr?: string | null): string {
+  if (!dateStr) return 'Unknown time';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 'Unknown time';
+    return formatDistanceToNow(d, { addSuffix: true });
+  } catch (e) {
+    return 'Unknown time';
+  }
+}
+
+export function safeFormatTime(dateStr?: string | null): string {
+  if (!dateStr) return '--:--';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return '--:--';
+    return d.toLocaleTimeString();
+  } catch (e) {
+    return '--:--';
+  }
+}
+
 export const listRuns = () => invoke<Run[]>('list_runs');
 
 export const getRun = (runId: string) => invoke<Run>('get_run', { runId });
@@ -164,6 +196,9 @@ export const submitApproval = (runId: string, approvalId: string, decision: 'app
 
 export const readWorkspaceFile = (runId: string, relativePath: string) => 
     invoke<string>('read_workspace_file', { runId, relativePath });
+
+export const deleteRun = (runId: string) =>
+  invoke<void>('delete_run', { runId });
 
 export const openExternal = (url: string) => open(url);
 

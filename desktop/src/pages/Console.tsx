@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { open as openExternal } from '@tauri-apps/plugin-shell';
-import { AlertTriangle, ExternalLink, Loader2, Monitor, RefreshCcw, ShieldAlert } from 'lucide-react';
+import { ExternalLink, Loader2, Monitor, RefreshCcw, ShieldAlert } from 'lucide-react';
 import { useDesktop } from '../contexts/DesktopContext';
 import { getConsoleInfo, getRuntimeCapabilities, openConsoleWindow as openConsoleWindowCommand } from '../lib/tauri';
 import type { ConsoleInfo, RuntimeCapabilities } from '../types';
@@ -94,9 +93,6 @@ export function Console() {
     ];
   }, [consoleInfo?.port]);
   const canOpenInAppWindow = Boolean(consoleInfo?.url && consoleInfo?.ui_available);
-  const authMode = capabilities.control_ui.auth_mode ?? consoleInfo?.auth_mode ?? 'token';
-  const insecureAuthFallback =
-    capabilities.control_ui.insecure_fallback ?? consoleInfo?.insecure_fallback ?? false;
 
   if (!isGatewayReady) {
     return (
@@ -140,13 +136,15 @@ export function Console() {
             Open In-App Window
           </button>
           {consoleInfo?.url && (
-            <button
-              onClick={() => void openExternal(consoleInfo.url)}
+            <a
+              href={consoleInfo.url}
+              target="_blank"
+              rel="noopener noreferrer"
               className="glass-button text-sm"
             >
               <ExternalLink className="w-4 h-4" />
               {consoleInfo?.ui_available ? 'Open Browser' : 'Open Browser (Root)'}
-            </button>
+            </a>
           )}
         </div>
       </div>
@@ -157,12 +155,16 @@ export function Console() {
           Safe Mode is active. Internet/network tools may be blocked by policy.
         </div>
       )}
-      {insecureAuthFallback && (
-        <div className="bg-red-500/10 border border-red-500/25 text-red-100 text-xs rounded-xl px-3 py-2 inline-flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4" />
-          Console auth fallback mode is active ({authMode}). Restart gateway from desktop to enable cookie auth.
-        </div>
-      )}
+
+      {/* MVP Clarification Banner */}
+      <div className="bg-blue-500/10 border border-blue-500/30 p-4 rounded-xl text-sm text-blue-100/90 space-y-2">
+        <p className="font-bold flex items-center gap-2"><Monitor className="w-4 h-4"/> Mission Control vs Console</p>
+        <p className="text-xs text-blue-100/70 leading-relaxed">
+          You are currently using <b>Mission Control</b> (the desktop app) to manage OpenClaw. The <b>Web Console</b> is designed for headless server deployments on a browser. In this MVP release, the Gateway exposes a simple placeholder. 
+          <br/><br/>
+          <b>You do not need the Web Console to use agents!</b> Head over to the Agents page to get started. 🚀
+        </p>
+      </div>
 
       {loading ? (
         <div className="glass-panel p-8 flex items-center justify-center text-white/60">
@@ -180,40 +182,41 @@ export function Console() {
       )}
 
       {!loading && consoleInfo && !consoleInfo.ui_available && (
-        <div className="glass-panel p-4 border border-amber-500/30 bg-amber-500/10 space-y-3">
+        <div className="glass-panel p-4 border border-blue-500/20 bg-blue-500/5 space-y-3">
           <div className="flex items-start gap-3">
-            <AlertTriangle className="w-5 h-5 text-amber-200 mt-0.5" />
+            <Monitor className="w-5 h-5 text-blue-300 mt-0.5" />
             <div className="space-y-1">
-              <h3 className="text-sm font-semibold text-amber-100">
-                Gateway is running, but this image does not expose the upstream Control UI
+              <h3 className="text-sm font-semibold text-blue-200">
+                Gateway APIs are Online
               </h3>
-              <p className="text-xs text-amber-50/90">
-                {consoleInfo.diagnostic || 'No HTML route found for Control UI candidates.'}
-              </p>
-              <p className="text-xs text-amber-50/80">
-                Update/rebuild the gateway image to include Control UI or add a separate control-ui service.
+              <p className="text-xs text-blue-100/70">
+                The gateway is routing API requests normally, but this container image does not bundle the HTML Control UI.
               </p>
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
             {consoleInfo.url && (
-              <button
-                onClick={() => void openExternal(consoleInfo.url)}
+              <a
+                href={consoleInfo.url}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="glass-button text-xs"
               >
                 <ExternalLink className="w-3 h-3" />
                 Open Gateway Root
-              </button>
+              </a>
             )}
             {apiDocLinks.map((link) => (
-              <button
+              <a
                 key={link.url}
-                onClick={() => void openExternal(link.url)}
+                href={link.url}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="glass-button text-xs"
               >
                 <ExternalLink className="w-3 h-3" />
                 {link.label}
-              </button>
+              </a>
             ))}
           </div>
         </div>

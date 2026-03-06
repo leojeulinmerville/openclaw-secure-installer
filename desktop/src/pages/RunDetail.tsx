@@ -1,16 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { Run, RunEvent } from '../types';
-import { getRun, getRunEvents, startRun, submitApproval, readWorkspaceFile } from '../lib/tauri';
+import type { Run, RunEvent } from '../types';
+import { getRun, getRunEvents, startRun, submitApproval, readWorkspaceFile, safeFormatDistanceToNow, safeFormatTime, deleteRun } from '../lib/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { StatusPill } from '../components/StatusPill';
 import { GlassCard } from '../components/GlassCard';
-import { ChevronLeft, Play, Clock, Box, FileText, ShieldAlert, X } from 'lucide-react';
+import { ChevronLeft, Play, Box, Clock, ShieldAlert, FileText, RotateCcw, Trash2, X } from 'lucide-react';
 import clsx from 'clsx';
-import { formatDistanceToNow } from 'date-fns';
 
 interface RunDetailProps {
   runId: string;
-  onNavigate: (page: 'runs') => void;
+  onNavigate: (page: 'runs' | 'create-run') => void;
 }
 
 export function RunDetail({ runId, onNavigate }: RunDetailProps) {
@@ -72,6 +71,26 @@ export function RunDetail({ runId, onNavigate }: RunDetailProps) {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [events.length]);
 
+  const handleDelete = async () => {
+    if (!run || !confirm('Are you sure you want to delete this run permanently?')) return;
+    try {
+      await deleteRun(run.id);
+      onNavigate('runs');
+    } catch (err) {
+      alert('Failed to delete run: ' + err);
+    }
+  };
+
+  const handleRerun = () => {
+    if (!run) return;
+    sessionStorage.setItem('openclaw_rerun', JSON.stringify({
+      title: run.title,
+      goal: run.user_goal,
+      agent_id: run.agent_id
+    }));
+    onNavigate('create-run');
+  };
+
   const handleStart = async () => {
     if (!run) return;
     setStarting(true);
@@ -125,12 +144,19 @@ export function RunDetail({ runId, onNavigate }: RunDetailProps) {
             </h2>
             <div className="flex items-center gap-3 mt-1 text-sm text-white/50">
               <span className="flex items-center gap-1.5"><Box className="w-3.5 h-3.5" /> {run.model}</span>
-              <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {formatDistanceToNow(new Date(run.created_at), { addSuffix: true })}</span>
+              <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {safeFormatDistanceToNow(run.created_at)}</span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
+          <button onClick={handleRerun} className="p-2 hover:bg-white/5 rounded-lg text-white/50 hover:text-cyan-400 transition-colors group" title="Re-Run (Duplicate)">
+            <RotateCcw className="w-4 h-4 group-hover:-rotate-180 transition-transform duration-500" />
+          </button>
+          <button onClick={handleDelete} className="p-2 hover:bg-white/5 rounded-lg text-white/50 hover:text-red-400 transition-colors" title="Delete Run">
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <div className="w-px h-6 bg-white/10 mx-1" />
           <StatusPill status={statusColor(run.status)} text={run.status} />
           {run.status === 'queued' && (
             <button onClick={handleStart} disabled={starting}
@@ -261,7 +287,7 @@ function TimelineItem({ event, onApprove }: { event: RunEvent; onApprove: (id: s
       </div>
       <div className="flex-1 pb-4">
         <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-mono text-white/40">{new Date(event.timestamp).toLocaleTimeString()}</span>
+          <span className="text-xs font-mono text-white/40">{safeFormatTime(event.timestamp)}</span>
           <span className={clsx('text-xs font-bold uppercase tracking-wider',
             isAgent ? 'text-cyan-400' : isTool ? 'text-purple-400' : isArtifact ? 'text-amber-400' : isApproval ? 'text-red-400' : 'text-slate-400')}>
             {event.type.replace(/\./g, ' ')}
