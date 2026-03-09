@@ -599,7 +599,7 @@ async function buildConnectionsStatus(
       configured:
         descriptor.id === "telegram"
           ? resolveTelegramConfigured(cfg, record)
-          : Boolean(record.configured),
+          : Boolean(record.configured) || Boolean((cfg.channels as Record<string, Record<string, unknown>>)?.[descriptor.id]),
       healthy: record.healthy === true,
       last_test:
         typeof record.last_test === "string" && record.last_test.trim()
@@ -661,13 +661,15 @@ function trimErrors(error: unknown): string {
   return trimmed.length > 300 ? `${trimmed.slice(0, 297)}...` : trimmed;
 }
 
-async function configureTelegramConnection(params: {
+async function configureChannelConnection(params: {
   id: string;
   cfg: OpenClawConfig;
   body: ConfigureRequestBody;
+  schema: ConnectionsSchemaResponse;
 }): Promise<{ configured: boolean; message: string; record: ConnectionStatusRecord }> {
-  if (params.id !== "telegram") {
-    throw new Error(`Channel "${params.id}" setup is not implemented yet. Use OpenClaw Console.`);
+  const descriptor = params.schema.channels.find((entry) => entry.id === params.id);
+  if (!descriptor) {
+    throw new Error(`Channel "${params.id}" is not known to the gateway.`);
   }
 
   const state = await readConnectionsState();
@@ -675,28 +677,74 @@ async function configureTelegramConnection(params: {
   const values = params.body.values ?? {};
   const secretRefsRaw = params.body.secret_refs ?? {};
 
-  const defaultChatId = readOptionalTrimmedString(values.default_chat_id);
-  if (defaultChatId && !/^-?[0-9]+$/.test(defaultChatId)) {
-    throw new Error("default_chat_id must be a numeric chat identifier.");
+  // For each field in the schema, extract the incoming value or fallback to the existing state
+  const nextValues: Record<string, string | number | boolean> = { ...existingRecord.values };
+  const nextSecretRefs: Record<string, string> = { ...existingRecord.secret_refs };
+  const channelConfigUpdates: Record<string, unknown> = {};
+
+  const existingChannelConfig = (params.cfg.channels as Record<string, Record<string, unknown>>)?.[params.id] || {};
+
+  for (const field of descriptor.schema.fields) {
+    if (field.type === "secret") {
+      const incomingSecretRef = readSecretRef(secretRefsRaw[field.key]);
+      const existingSecretRef =
+        readOptionalTrimmedString(existingRecord.secret_refs?.[field.key]) ??
+        parseKeychainPlaceholder(existingChannelConfig[field.key]);
+      const secretRef = incomingSecretRef ?? existingSecretRef;
+      
+      if (field.required && !secretRef) {
+        throw new Error(`${field.key} is required. Store it in desktop keychain and resend configure.`);
+      }
+      
+      if (secretRef) {
+        nextSecretRefs[field.key] = secretRef;
+        channelConfigUpdates[field.key] = toKeychainPlaceholder(secretRef);
+      }
+    } else if (field.type === "boolean") {
+       const val = typeof values[field.key] === "boolean" ? values[field.key] : existingChannelConfig[field.key];
+       if (val !== undefined) {
+         nextValues[field.key] = Boolean(val);
+         channelConfigUpdates[field.key] = Boolean(val);
+       }
+    } else if (field.type === "number") {
+       const val = typeof values[field.key] === "number" ? values[field.key] : existingChannelConfig[field.key];
+       if (val !== undefined) {
+         nextValues[field.key] = Number(val);
+         channelConfigUpdates[field.key] = Number(val);
+       }
+    } else {
+      const incomingValue = readOptionalTrimmedString(values[field.key]);
+      const val = incomingValue ?? existingChannelConfig[field.key];
+      
+      if (field.required && !val) {
+         throw new Error(`${field.key} is required.`);
+      }
+      
+      if (val !== undefined && val !== null) {
+        if (field.regex && typeof val === "string") {
+            const re = new RegExp(field.regex);
+            if (!re.test(val)) {
+                throw new Error(`${field.key} format is invalid.`);
+            }
+        }
+        if (typeof val === "string" || typeof val === "number" || typeof val === "boolean") {
+            nextValues[field.key] = val;
+        }
+        channelConfigUpdates[field.key] = val;
+      }
+    }
   }
 
-  const incomingSecretRef = readSecretRef(secretRefsRaw.bot_token);
-  const existingSecretRef =
-    readOptionalTrimmedString(existingRecord.secret_refs?.bot_token) ??
-    parseKeychainPlaceholder(params.cfg.channels?.telegram?.botToken);
-  const secretRef = incomingSecretRef ?? existingSecretRef;
-  if (!secretRef) {
-    throw new Error("bot_token is required. Store it in desktop keychain and resend configure.");
-  }
+  // Force enable
+  channelConfigUpdates.enabled = true;
 
   const nextConfig: OpenClawConfig = {
     ...params.cfg,
     channels: {
       ...params.cfg.channels,
-      telegram: {
-        ...params.cfg.channels?.telegram,
-        enabled: true,
-        botToken: toKeychainPlaceholder(secretRef),
+      [params.id]: {
+        ...existingChannelConfig,
+        ...channelConfigUpdates,
       },
     },
   };
@@ -709,21 +757,15 @@ async function configureTelegramConnection(params: {
     update: (record) => ({
       ...record,
       configured: true,
-      values: {
-        ...record.values,
-        ...(defaultChatId ? { default_chat_id: defaultChatId } : {}),
-      },
-      secret_refs: {
-        ...record.secret_refs,
-        bot_token: secretRef,
-      },
+      values: nextValues,
+      secret_refs: nextSecretRefs,
       errors: [],
     }),
   });
 
   return {
     configured: true,
-    message: "Telegram connection saved.",
+    message: `${descriptor.display_name} connection saved.`,
     record: updatedRecord,
   };
 }
@@ -1045,13 +1087,27 @@ async function runProviderConnectionTest(params: {
   }
 }
 
-async function testTelegramConnection(params: {
+async function testChannelConnection(params: {
   id: string;
   cfg: OpenClawConfig;
   body: TestRequestBody;
+  schema: ConnectionsSchemaResponse;
 }): Promise<{ healthy: boolean; message: string; details: Record<string, unknown> }> {
+  const descriptor = params.schema.channels.find((entry) => entry.id === params.id);
+  if (!descriptor) {
+    throw new Error(`Channel "${params.id}" is not known to the gateway.`);
+  }
+  
+  if (!descriptor.test_capabilities.can_test) {
+      return {
+          healthy: true,
+          message: `${descriptor.display_name} connection configured (no test available).`,
+          details: {},
+      };
+  }
+
   if (params.id !== "telegram") {
-    throw new Error(`Channel "${params.id}" test is not implemented yet. Use OpenClaw Console.`);
+      throw new Error(`Channel "${params.id}" test is not implemented yet. Use OpenClaw Console.`);
   }
 
   const values = params.body.values ?? {};
@@ -1214,10 +1270,11 @@ export async function handleGatewayConnectionsHttpRequest(
     try {
       const result =
         route.kind === "channel"
-          ? await configureTelegramConnection({
+          ? await configureChannelConnection({
               id: route.id,
               cfg,
               body,
+              schema: await buildConnectionsSchema(cfg),
             })
           : await configureProviderConnection({
               id: route.id,
@@ -1257,7 +1314,7 @@ export async function handleGatewayConnectionsHttpRequest(
     try {
       const result =
         route.kind === "channel"
-          ? await testTelegramConnection({ id: route.id, cfg, body })
+          ? await testChannelConnection({ id: route.id, cfg, body, schema: await buildConnectionsSchema(cfg) })
           : await testProviderConnection({ id: route.id, cfg, body });
       await writeTestResult({
         kind: route.kind,

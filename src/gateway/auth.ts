@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
 import type { GatewayAuthConfig, GatewayTailscaleMode } from "../config/config.js";
 import { readTailscaleWhoisIdentity, type TailscaleWhoisIdentity } from "../infra/tailscale.js";
-import { isTrustedProxyAddress, parseForwardedForClientIp, resolveGatewayClientIp } from "./net.js";
+import { isTrustedProxyAddress, parseForwardedForClientIp, resolveGatewayClientIp, isPrivateIpAddress } from "./net.js";
 export type ResolvedGatewayAuthMode = "token" | "password";
 
 export const LOCAL_SESSION_COOKIE_NAME = "openclaw_local_session";
@@ -253,10 +253,7 @@ export function isLocalDirectRequest(req?: IncomingMessage, trustedProxies?: str
     return false;
   }
   const clientIp = resolveRequestClientIp(req, trustedProxies) ?? "";
-  if (!isLoopbackAddress(clientIp)) {
-    return false;
-  }
-
+  
   const host = getHostName(req.headers?.host);
   const hostIsLocal = host === "localhost" || host === "127.0.0.1" || host === "::1";
   const hostIsTailscaleServe = host.endsWith(".ts.net");
@@ -268,6 +265,20 @@ export function isLocalDirectRequest(req?: IncomingMessage, trustedProxies?: str
   );
 
   const remoteIsTrustedProxy = isTrustedProxyAddress(req.socket?.remoteAddress, trustedProxies);
+
+  let clientIsLocal = isLoopbackAddress(clientIp);
+
+  // If the Gateway is running in Docker, the client IP might be the Docker bridge's private IP.
+  // We allow Private IPs if the Host header is explicitly localhost/127.0.0.1 (meaning it was port-forwarded locally)
+  // and no external proxy headers are present.
+  if (!clientIsLocal && hostIsLocal && !hasForwarded && isPrivateIpAddress(clientIp)) {
+    clientIsLocal = true;
+  }
+
+  if (!clientIsLocal) {
+    return false;
+  }
+
   return (hostIsLocal || hostIsTailscaleServe) && (!hasForwarded || remoteIsTrustedProxy);
 }
 

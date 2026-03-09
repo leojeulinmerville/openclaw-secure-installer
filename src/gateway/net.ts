@@ -20,6 +20,18 @@ export function isLoopbackAddress(ip: string | undefined): boolean {
   return false;
 }
 
+export function isPrivateIpAddress(ip: string | undefined): boolean {
+  if (!ip) return false;
+  const normalized = normalizeIPv4MappedAddress(ip).toLowerCase();
+  if (normalized.startsWith("10.")) return true;
+  if (normalized.startsWith("192.168.")) return true;
+  if (normalized.startsWith("172.")) {
+    const second = parseInt(normalized.split(".")[1] || "0", 10);
+    return second >= 16 && second <= 31;
+  }
+  return false;
+}
+
 function normalizeIPv4MappedAddress(ip: string): string {
   if (ip.startsWith("::ffff:")) {
     return ip.slice("::ffff:".length);
