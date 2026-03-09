@@ -80,6 +80,16 @@ const OLLAMA_DEFAULT_COST = {
   cacheWrite: 0,
 };
 
+const LMSTUDIO_BASE_URL = "http://127.0.0.1:1234/v1";
+const LMSTUDIO_DEFAULT_CONTEXT_WINDOW = 128000;
+const LMSTUDIO_DEFAULT_MAX_TOKENS = 8192;
+const LMSTUDIO_DEFAULT_COST = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+};
+
 export const QIANFAN_BASE_URL = "https://qianfan.baidubce.com/v2";
 export const QIANFAN_DEFAULT_MODEL_ID = "deepseek-v3.2";
 const QIANFAN_DEFAULT_CONTEXT_WINDOW = 98304;
@@ -145,6 +155,51 @@ async function discoverOllamaModels(): Promise<ModelDefinitionConfig[]> {
     });
   } catch (error) {
     console.warn(`Failed to discover Ollama models: ${String(error)}`);
+    return [];
+  }
+}
+
+interface LMStudioModelsResponse {
+  data: {
+    id: string;
+    object: string;
+    owned_by: string;
+  }[];
+}
+
+async function discoverLMStudioModels(): Promise<ModelDefinitionConfig[]> {
+  if (process.env.VITEST || process.env.NODE_ENV === "test") {
+    return [];
+  }
+  try {
+    const response = await fetch(`${LMSTUDIO_BASE_URL}/models`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) {
+      console.warn(`Failed to discover LM Studio models: ${response.status}`);
+      return [];
+    }
+    const payload = (await response.json()) as LMStudioModelsResponse;
+    if (!payload.data || payload.data.length === 0) {
+      console.warn("No LM Studio models found on local instance");
+      return [];
+    }
+    return payload.data.map((model) => {
+      const modelId = model.id;
+      const isReasoning =
+        modelId.toLowerCase().includes("r1") || modelId.toLowerCase().includes("reasoning");
+      return {
+        id: modelId,
+        name: modelId,
+        reasoning: isReasoning,
+        input: ["text"],
+        cost: LMSTUDIO_DEFAULT_COST,
+        contextWindow: LMSTUDIO_DEFAULT_CONTEXT_WINDOW,
+        maxTokens: LMSTUDIO_DEFAULT_MAX_TOKENS,
+      };
+    });
+  } catch (error) {
+    console.warn(`Failed to discover LM Studio models: ${String(error)}`);
     return [];
   }
 }
@@ -414,6 +469,15 @@ async function buildOllamaProvider(): Promise<ProviderConfig> {
   };
 }
 
+async function buildLMStudioProvider(): Promise<ProviderConfig> {
+  const models = await discoverLMStudioModels();
+  return {
+    baseUrl: LMSTUDIO_BASE_URL,
+    api: "openai-completions",
+    models,
+  };
+}
+
 export function buildQianfanProvider(): ProviderConfig {
   return {
     baseUrl: QIANFAN_BASE_URL,
@@ -534,6 +598,15 @@ export async function resolveImplicitProviders(params: {
     resolveApiKeyFromProfiles({ provider: "ollama", store: authStore });
   if (ollamaKey) {
     providers.ollama = { ...(await buildOllamaProvider()), apiKey: ollamaKey };
+  }
+
+  // LM Studio provider - always add since it's a local proxy without strict auth
+  const lmstudioKey =
+    resolveEnvApiKeyVarName("lmstudio") ??
+    resolveApiKeyFromProfiles({ provider: "lmstudio", store: authStore }) ??
+    "lmstudio"; // Default skeleton key
+  if (lmstudioKey) {
+    providers.lmstudio = { ...(await buildLMStudioProvider()), apiKey: lmstudioKey };
   }
 
   const qianfanKey =

@@ -9,7 +9,6 @@ mod agents;
 mod chat;
 mod runs;
 mod patch;
-pub mod llm;
 
 fn main() {
   tauri::Builder::default()
@@ -72,10 +71,6 @@ fn main() {
         chat::get_chat,
         chat::save_chat,
         chat::delete_chat,
-        llm::ollama_test,
-        llm::ollama_list_models,
-        llm::ollama_pull_model,
-        llm::ollama_run_test_completion,
         // Runs
         runs::create_run,
         runs::list_runs,

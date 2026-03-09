@@ -24,10 +24,5 @@ export default defineConfig([
     fixedExtension: false,
     platform: "node",
   },
-  {
-    entry: "src/extensionAPI.ts",
-    env,
-    fixedExtension: false,
-    platform: "node",
-  },
+
 ]);

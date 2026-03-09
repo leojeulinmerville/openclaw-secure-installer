@@ -218,6 +218,16 @@ export async function resolveApiKeyForProvider(params: {
     }
   }
 
+  // Gracefully fallback for purely local providers that don't enforce strict API keys.
+  const localProvidersList = ["lmstudio", "ollama"];
+  if (localProvidersList.includes(normalized)) {
+    return {
+      apiKey: normalized, // dummy key
+      source: "local-bypass",
+      mode: "api-key",
+    };
+  }
+
   const authStorePath = resolveAuthStorePathForDisplay(params.agentDir);
   const resolvedAgentDir = path.dirname(authStorePath);
   throw new Error(
@@ -304,6 +314,7 @@ export function resolveEnvApiKey(provider: string): EnvApiKeyResult | null {
     opencode: "OPENCODE_API_KEY",
     qianfan: "QIANFAN_API_KEY",
     ollama: "OLLAMA_API_KEY",
+    lmstudio: "LMSTUDIO_API_KEY",
   };
   const envVar = envMap[normalized];
   if (!envVar) {

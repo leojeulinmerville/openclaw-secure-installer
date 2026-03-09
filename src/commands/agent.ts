@@ -321,6 +321,12 @@ export async function agentCommand(
         model = storedModelOverride;
       }
     }
+
+    // Apply explicit CLI overrides (from desktop run dropdown).
+    // This takes precedence over defaults and session history.
+    if (opts.provider) provider = opts.provider;
+    if (opts.model) model = opts.model;
+
     if (sessionEntry) {
       const authProfileId = sessionEntry.authProfileOverride;
       if (authProfileId) {

@@ -5,7 +5,6 @@ use tauri::{AppHandle, Emitter, Manager};
 use chrono::Utc;
 use uuid::Uuid;
 use std::io::Write;
-use keyring;
 use serde_json;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -230,150 +229,108 @@ pub async fn start_run(app: AppHandle, run_id: String) -> Result<Run, String> {
 }
 
 async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model: &str, prompt: &str, workspace: &str) {
-    use crate::llm::LlmClient;
-
     // 1. Check Internet/Secrets if needed
     let allow_internet = crate::state_manager::get_allow_internet(app.clone()).await.unwrap_or(false);
     
-    let mut api_key = None;
-    if provider == "openai" {
-        if !allow_internet {
-             let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": "Internet disabled. Cannot use OpenAI." }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("Internet disabled".to_string())).await;
-             return;
-        }
-        
-        if let Ok(entry) = keyring::Entry::new("my_openclaw", "openai_api_key") {
-             if let Ok(pwd) = entry.get_password() {
-                 api_key = Some(pwd);
-             }
-        }
-        if api_key.is_none() {
-             let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": "OpenAI API Key not found. Please set it in Settings." }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("No API Key".to_string())).await;
-             return;
-        }
-    }
-
-    // 2. Build Context (File Tree)
-    // Minimal snapshot: list files in root (depth 1 or 2)
-    let context_tree = match list_files_recursive(workspace, 2) {
-        Ok(tree) => tree,
-        Err(e) => {
-             let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Failed to read workspace: {}", e) }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e)).await;
-             return;
-        }
+    // Determine the openclaw bin path
+    let cwd = std::env::current_dir().unwrap_or_default();
+    let dev_script1 = cwd.join("../../scripts/run-node.mjs");
+    let dev_script2 = cwd.join("../scripts/run-node.mjs");
+    
+    let base_cmd = if dev_script1.exists() {
+        "node".to_string()
+    } else if dev_script2.exists() {
+        "node".to_string()
+    } else if cfg!(target_os = "windows") {
+        "openclaw.cmd".to_string()
+    } else {
+        "openclaw".to_string()
     };
 
-    let system_prompt = format!(r#"You are an expert software engineer.
-You are running in a workspace at: {}
-Current file structure:
-{}
-
-Your goal is to solve the user's request.
-Output your response in the following strict format:
-
-# SUMMARY
-[A brief description of what you plan to do]
-
-# PATCH
-[A Unified Diff of the changes. Start with "diff --git" or "--- a/". ensure paths are relative to root]
-
-# VERIFICATION
-[Steps to verify the change]
-
-Do not include any other text outside these sections.
-"#, workspace, context_tree);
-
-    let _ = _append_event(app, run_id, "llm.requested", serde_json::json!({ "model": model, "provider": provider }));
-
-    // 3. Call LLM
-    let client = LlmClient::new(provider, model, None, api_key);
-    match client.complete(&system_prompt, prompt).await {
-        Ok((content, usage)) => {
-             let _ = _append_event(app, run_id, "llm.completed", serde_json::json!({ "usage": format!("{:?}", usage) }));
-             
-             // 4. Parse Response
-             // Helper regex or split
-             let (summary, patch, verify) = parse_artifacts(&content);
-
-             if patch.trim().is_empty() {
-                  let _ = _append_event(app, run_id, "agent.message", serde_json::json!({ "role": "assistant", "content": "I couldn't generate a valid patch. Please check my summary." }));
-                  // continue?
-             }
-
-             // 5. Write Artifacts
-             if let Ok(run) = get_run(app.clone(), run_id.to_string()).await {
-                 let runs_dir = get_runs_dir(app).unwrap(); // safe unzip
-                 let artifacts_path = runs_dir.join(run_id).join("artifacts");
-                 let _ = fs::create_dir_all(&artifacts_path);
-
-                 let _ = fs::write(artifacts_path.join("SUMMARY.md"), &summary);
-                 let _ = _append_event(app, run_id, "artifact.created", serde_json::json!({ "type": "summary", "name": "Summary", "path": "artifacts/SUMMARY.md" }));
-                 
-                 let _ = fs::write(artifacts_path.join("PATCH.diff"), &patch);
-                 let _ = _append_event(app, run_id, "artifact.created", serde_json::json!({ "type": "patch", "name": "Proposed Patch", "path": "artifacts/PATCH.diff" }));
-                 
-                 let _ = fs::write(artifacts_path.join("VERIFICATION.md"), &verify);
-             }
-
-             // 6. Request Approval
-             let _ = _append_event(app, run_id, "approval.requested", serde_json::json!({
-                 "kind": "filesystem.write_patch",
-                 "summary": summary.lines().next().unwrap_or("Review Patch"),
-                 "risk_level": "medium"
-             }));
-
-             let _ = update_run_status(app, run_id, RunStatus::Blocked, None).await;
-        }
-        Err(e) => {
-             let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": e.to_string() }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e.to_string())).await;
-        }
-    }
-
-}
-
-fn list_files_recursive(path: &str, _depth: usize) -> Result<String, String> {
-    // Simple implementation
-    let root = Path::new(path);
-    let mut out = String::new();
-    
-    if root.is_dir() {
-        if let Ok(entries) = fs::read_dir(root) {
-            for entry in entries {
-                if let Ok(e) = entry {
-                    let p = e.path();
-                    if let Ok(rel) = p.strip_prefix(root) {
-                         out.push_str(&format!("- {}\n", rel.display()));
-                    }
-                }
+    let mut get_cmd = || -> std::process::Command {
+        let mut cmd = std::process::Command::new(&base_cmd);
+        if dev_script1.exists() {
+            cmd.arg(dev_script1.to_string_lossy().to_string());
+            if let Some(parent) = dev_script1.parent().and_then(|p| p.parent()) {
+                cmd.current_dir(parent);
+            }
+        } else if dev_script2.exists() {
+            cmd.arg(dev_script2.to_string_lossy().to_string());
+            if let Some(parent) = dev_script2.parent().and_then(|p| p.parent()) {
+                cmd.current_dir(parent);
             }
         }
-    }
-    Ok(out)
-}
+        cmd
+    };
+    
+    let _ = _append_event(app, run_id, "agent.setup", serde_json::json!({ "workspace": workspace, "model": model, "provider": provider }));
+    
+    // Command 1: Add Agent (creates agent config if it doesn't exist)
+    let mut add_cmd = get_cmd();
+    let add_status = add_cmd
+        .arg("agents")
+        .arg("add")
+        .arg(run_id)
+        .arg("--workspace")
+        .arg(workspace)
+        .arg("--model")
+        .arg(model)
+        .arg("--non-interactive")
+        .output();
 
-fn parse_artifacts(content: &str) -> (String, String, String) {
-    // Naive split by headers
-    let parts: Vec<&str> = content.split("# ").collect();
-    let mut summary = String::new();
-    let mut patch = String::new();
-    let mut verify = String::new();
-
-    for part in parts {
-        if part.starts_with("SUMMARY") {
-            summary = part.replace("SUMMARY", "").trim().to_string();
-        } else if part.starts_with("PATCH") {
-            patch = part.replace("PATCH", "").trim().to_string();
-            // strip code fences if present
-            patch = patch.replace("```diff", "").replace("```", "").trim().to_string();
-        } else if part.starts_with("VERIFICATION") {
-            verify = part.replace("VERIFICATION", "").trim().to_string();
+    match add_status {
+        Ok(out) if out.status.success() => {
+             let _ = _append_event(app, run_id, "agent.setup_ok", serde_json::json!({ "output": String::from_utf8_lossy(&out.stdout).to_string() }));
+        }
+        Ok(out) => {
+             let err_msg = String::from_utf8_lossy(&out.stderr).to_string();
+             let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Failed to configure agent: {}", err_msg) }));
+             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("Agent Setup Failed".to_string())).await;
+             return;
+        }
+        Err(e) => {
+             // Fallback for dev mode if `openclaw` binary not found globally.
+             let _ = _append_event(app, run_id, "agent.setup_warning", serde_json::json!({ "reason": format!("Command not found, assuming dev environment: {}", e) }));
         }
     }
-    (summary, patch, verify)
+
+    // Command 2: Execute Agent Turn
+    let _ = _append_event(app, run_id, "llm.requested", serde_json::json!({ "prompt": prompt, "agent_id": run_id }));
+    let _ = update_run_status(app, run_id, RunStatus::Running, None).await;
+
+    // Use openclaw CLI to run the agent
+    let mut run_cmd = get_cmd();
+    let cmd = run_cmd
+        .arg("agent")
+        .arg("--agent")
+        .arg(run_id)
+        .arg("--provider")
+        .arg(provider)
+        .arg("--model")
+        .arg(model)
+        .arg("--message")
+        .arg(prompt)
+        .arg("--local")
+        .output();
+
+    match cmd {
+        Ok(out) => {
+            if out.status.success() {
+                let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+                let _ = _append_event(app, run_id, "llm.completed", serde_json::json!({ "output": stdout }));
+                let _ = _append_event(app, run_id, "agent.message", serde_json::json!({ "role": "assistant", "content": stdout }));
+                let _ = update_run_status(app, run_id, RunStatus::Done, None).await;
+            } else {
+                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+                let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Agent CLI error: {}", stderr) }));
+                let _ = update_run_status(app, run_id, RunStatus::Failed, Some(stderr)).await;
+            }
+        }
+        Err(e) => {
+            let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Failed to execute agent CLI: {}", e) }));
+            let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e.to_string())).await;
+        }
+    }
 }
 
 async fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, error: Option<String>) -> Result<(), String> {
