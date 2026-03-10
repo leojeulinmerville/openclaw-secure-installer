@@ -14,8 +14,8 @@
       "description": "Gestion des issues et PR du repo OpenClaw"
     },
     "playwright": {
-      "command": "playwright-mcp",
-      "args": [],
+      "command": "node",
+      "args": ["C:/Users/leoje/AppData/Roaming/npm/node_modules/@playwright/mcp/cli.js"],
       "description": "Tests E2E et validation UI (Phase 3)"
     },
     "docker": {
@@ -24,8 +24,8 @@
       "description": "Inspection des containers Gateway et Sandboxes"
     },
     "fetch": {
-      "command": "mcp-server-fetch-typescript",
-      "args": [],
+      "command": "node",
+      "args": ["C:/Users/leoje/AppData/Roaming/npm/node_modules/mcp-server-fetch-typescript/build/index.js"],
       "description": "Récupération de doc technique (LM Studio, Tauri v2)"
     }
   }

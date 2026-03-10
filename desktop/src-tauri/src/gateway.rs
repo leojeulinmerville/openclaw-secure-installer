@@ -26,6 +26,14 @@ const DEFAULT_CONTROL_UI_AUTH_MODE: &str = "token";
 const LOCAL_AUTH_BOOTSTRAP_PATH: &str = "/api/v1/local-auth/bootstrap";
 
 fn get_desktop_bootstrap_token(app: &AppHandle) -> String {
+    #[cfg(debug_assertions)]
+    {
+        let t = "dev-token".to_string();
+        let _ = crate::secrets::set_secret_internal(app, "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN", &t);
+        return t;
+    }
+
+    #[cfg(not(debug_assertions))]
     crate::secrets::get_secret_internal(app, "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN").unwrap_or_else(|| {
         let t = format!("desktop-bootstrap-{}", uuid::Uuid::new_v4().simple());
         let _ = crate::secrets::set_secret_internal(app, "OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN", &t);
@@ -1465,6 +1473,12 @@ pub(crate) fn ensure_gateway_ready(app: &AppHandle) -> Result<(), GatewayError> 
 
 #[tauri::command]
 pub async fn get_gateway_status(app: AppHandle) -> Result<GatewayStatusResult, String> {
+    #[cfg(debug_assertions)]
+    {
+        let t = "dev-token".to_string();
+        let _ = crate::secrets::set_secret_internal(&app, crate::secrets::GATEWAY_TOKEN_SECRET_KEY, &t);
+    }
+
     let dir = get_app_data_dir(&app)?;
     let (stable, diag) = check_gateway_strictly(&dir, false);
 

@@ -11,11 +11,12 @@ services:
 
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
       OPENCLAW_GATEWAY_PASSWORD: ${OPENCLAW_GATEWAY_PASSWORD:-}
+      OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: ${OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN}
 
       OPENCLAW_SAFE_MODE: "1"
       BROWSER: "echo"
 
-    command: [ "node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--port", "18789", "--bind", "loopback" ]
+    command: [ "node", "openclaw.mjs", "gateway", "--allow-unconfigured", "--port", "18789", "--bind", "lan" ]
 
     ports:
       - "127.0.0.1:${OPENCLAW_GATEWAY_PORT:-18789}:18789"
@@ -47,6 +48,7 @@ services:
       TERM: xterm-256color
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN}
       OPENCLAW_GATEWAY_PASSWORD: ${OPENCLAW_GATEWAY_PASSWORD:-}
+      OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: ${OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN}
       OPENCLAW_SAFE_MODE: "1"
 
     entrypoint: [ "node", "openclaw.mjs" ]
