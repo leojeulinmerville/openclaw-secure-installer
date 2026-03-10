@@ -129,6 +129,21 @@ export function RunDetail({ runId, onNavigate }: RunDetailProps) {
 
   const artifacts = events.filter(e => e.type === 'artifact.created').map(e => e.payload as any);
 
+  // Group consecutive run.log events
+  const groupedEvents: RunEvent[] = [];
+  for (const event of events) {
+    const last = groupedEvents[groupedEvents.length - 1];
+    if (last && last.type === 'run.log' && event.type === 'run.log') {
+      const lastP = last.payload as { stream: string; content: string };
+      const currentP = event.payload as { stream: string; content: string };
+      if (lastP.stream === currentP.stream) {
+        lastP.content += '\n' + currentP.content;
+        continue;
+      }
+    }
+    groupedEvents.push({ ...event, payload: JSON.parse(JSON.stringify(event.payload)) });
+  }
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 relative">
       {/* ── Header ── */}
@@ -188,9 +203,9 @@ export function RunDetail({ runId, onNavigate }: RunDetailProps) {
       <GlassCard className="min-h-[500px]">
         {activeTab === 'timeline' && (
           <div className="space-y-6">
-            {events.length === 0
+            {groupedEvents.length === 0
               ? <div className="text-center py-12 text-white/30">No events yet</div>
-              : events.map((ev, i) => <TimelineItem key={ev.id || i} event={ev} onApprove={handleApprove} />)
+              : groupedEvents.map((ev, i) => <TimelineItem key={ev.id || i} event={ev} onApprove={handleApprove} />)
             }
             {run.status === 'running' && (
               <div className="flex items-center gap-3 animate-pulse opacity-50 pl-4 border-l-2 border-white/10">
@@ -274,26 +289,28 @@ function DiffViewer({ content }: { content: string }) {
 // ── Timeline item ────────────────────────────────────────────────────
 function TimelineItem({ event, onApprove }: { event: RunEvent; onApprove: (id: string, decision: 'approved' | 'rejected') => void }) {
   const isAgent = event.type === 'agent.message';
+  const isLog = event.type === 'run.log';
   const isTool = event.type === 'tool.requested' || event.type === 'tool.result';
   const isArtifact = event.type === 'artifact.created';
   const isApproval = event.type === 'approval.requested';
 
   return (
-    <div className={clsx('flex gap-4', isAgent ? 'pl-0' : 'pl-4')}>
+    <div className={clsx('flex gap-4', (isAgent || isLog) ? 'pl-0' : 'pl-4')}>
       <div className="flex flex-col items-center">
         <div className={clsx('w-2 h-2 rounded-full mt-2 ring-4 ring-black/50',
-          isAgent ? 'bg-cyan-400' : isTool ? 'bg-purple-400' : isArtifact ? 'bg-amber-400' : isApproval ? 'bg-red-500' : 'bg-slate-500')} />
+          isAgent ? 'bg-cyan-400' : isLog ? 'bg-white/20' : isTool ? 'bg-purple-400' : isArtifact ? 'bg-amber-400' : isApproval ? 'bg-red-500' : 'bg-slate-500')} />
         <div className="w-px h-full bg-white/5 my-2" />
       </div>
       <div className="flex-1 pb-4">
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-mono text-white/40">{safeFormatTime(event.timestamp)}</span>
           <span className={clsx('text-xs font-bold uppercase tracking-wider',
-            isAgent ? 'text-cyan-400' : isTool ? 'text-purple-400' : isArtifact ? 'text-amber-400' : isApproval ? 'text-red-400' : 'text-slate-400')}>
+            isAgent ? 'text-cyan-400' : isLog ? 'text-white/20' : isTool ? 'text-purple-400' : isArtifact ? 'text-amber-400' : isApproval ? 'text-red-400' : 'text-slate-400')}>
             {event.type.replace(/\./g, ' ')}
           </span>
         </div>
-        <div className="text-sm text-white/80 leading-relaxed bg-white/5 p-3 rounded-lg border border-white/5">
+        <div className={clsx('text-sm leading-relaxed rounded-lg border', 
+          isLog ? 'bg-black/20 border-white/5 p-2 font-mono text-[11px]' : 'bg-white/5 p-3 border-white/5 text-white/80')}>
           <EventPayload event={event} onApprove={onApprove} />
         </div>
       </div>
@@ -305,6 +322,11 @@ function EventPayload({ event, onApprove }: { event: RunEvent; onApprove: (id: s
   const p = event.payload as any;
   const type = event.type as string;
   if (type === 'agent.message') return <p className="whitespace-pre-wrap">{p.content}</p>;
+  if (type === 'run.log') return (
+    <div className={clsx("whitespace-pre-wrap", p.stream === 'stderr' ? "text-red-400/70" : "text-white/50")}>
+      {p.content}
+    </div>
+  );
   if (type === 'artifact.created') return <p>Created artifact: <strong>{p.name}</strong> ({p.type})</p>;
   if (type === 'approval.requested') return (
     <div className="flex gap-3 items-start">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { FlaskConical, Link2, Loader2, RefreshCcw, ShieldAlert } from 'lucide-react';
+import { FlaskConical, Link2, Loader2, RefreshCcw, ShieldAlert, LogOut, Phone } from 'lucide-react';
 import { useDesktop } from '../contexts/DesktopContext';
 import {
   connectionsConfigure,
@@ -7,7 +7,9 @@ import {
   connectionsGetStatus,
   connectionsTest,
   openConsoleWindow,
+  whatsappLogout,
 } from '../lib/tauri';
+import { WhatsAppLogin } from '../components/WhatsAppLogin';
 import type {
   ChannelConnectionSchemaItem,
   ConnectionKind,
@@ -51,6 +53,7 @@ export function Connections() {
   const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [selected, setSelected] = useState<SelectedConnection | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const [showWhatsAppLogin, setShowWhatsAppLogin] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -173,12 +176,28 @@ export function Connections() {
     }
   };
 
-  const handlePair = async () => {
+  const handlePair = async (id: string) => {
+    if (id === 'whatsapp') {
+      setShowWhatsAppLogin(true);
+      return;
+    }
     try {
       await openConsoleWindow();
       setResultMessage('Opened OpenClaw Console for pairing flow.');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const handleLogout = async (_kind: ConnectionKind, id: string) => {
+    if (id === 'whatsapp') {
+      try {
+        await whatsappLogout();
+        setResultMessage('Logged out from WhatsApp.');
+        await load();
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
     }
   };
 
@@ -204,6 +223,15 @@ export function Connections() {
 
   return (
     <div className="h-full p-5 space-y-4">
+      {showWhatsAppLogin && (
+        <WhatsAppLogin 
+          onClose={() => setShowWhatsAppLogin(false)} 
+          onSuccess={() => {
+            setShowWhatsAppLogin(false);
+            load();
+          }}
+        />
+      )}
       <div className="glass-panel p-4 flex flex-col gap-3">
         <div className="flex flex-wrap items-center justify-between">
           <div>
@@ -248,7 +276,8 @@ export function Connections() {
             statuses={status.channels}
             onSetup={(id) => onSelectConnection('channel', id)}
             onTest={(id, fields) => void handleTestConnection('channel', id, fields)}
-            onPair={() => void handlePair()}
+            onPair={(id) => void handlePair(id)}
+            onLogout={(id) => void handleLogout('channel', id)}
             testing={testing}
           />
           <ConnectionGroup
@@ -257,7 +286,8 @@ export function Connections() {
             statuses={status.providers}
             onSetup={(id) => onSelectConnection('provider', id)}
             onTest={(id, fields) => void handleTestConnection('provider', id, fields)}
-            onPair={() => void handlePair()}
+            onPair={(id) => void handlePair(id)}
+            onLogout={(id) => void handleLogout('provider', id)}
             testing={testing}
           />
         </div>
@@ -307,7 +337,7 @@ export function Connections() {
             {isChannelDescriptor(selectedDescriptor) &&
               selectedDescriptor.requires_pairing &&
               selectedDescriptor.test_capabilities.pairing_supported && (
-                <button onClick={() => void handlePair()} className="glass-button text-sm">
+                <button onClick={() => void handlePair(selected.id)} className="glass-button text-sm">
                   Pair In Console
                 </button>
               )}
@@ -350,7 +380,8 @@ function ConnectionGroup(props: {
   statuses: ConnectionStatusItem[];
   onSetup: (id: string) => void;
   onTest: (id: string, fields: ConnectionSchemaField[]) => void;
-  onPair: () => void;
+  onPair: (id: string) => void;
+  onLogout: (id: string) => void;
   testing: boolean;
 }) {
   return (
@@ -363,11 +394,24 @@ function ConnectionGroup(props: {
           const requiresPairing = isChannelDescriptor(item) ? item.requires_pairing : false;
           const pairingSupported =
             item.test_capabilities.pairing_supported === true && requiresPairing;
+          
+          // WhatsApp specific metadata from status
+          const waAccount = item.id === 'whatsapp' ? (status as any)?.accounts?.default : null;
+          const linkedNumber = waAccount?.self?.e164;
+
           return (
             <div key={item.id} className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium text-white">{item.display_name}</p>
-                {status && <StatusBadge item={status} />}
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-white">{item.display_name}</p>
+                  {status && <StatusBadge item={status} />}
+                </div>
+                {linkedNumber && (
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-mono">
+                    <Phone className="w-3 h-3" />
+                    +{linkedNumber}
+                  </div>
+                )}
               </div>
               <p className="text-xs text-white/50">
                 {canTest
@@ -387,9 +431,15 @@ function ConnectionGroup(props: {
                 >
                   Test
                 </button>
-                {pairingSupported && (
-                  <button onClick={() => props.onPair()} className="glass-button text-xs">
+                {pairingSupported && !waAccount?.linked && (
+                  <button onClick={() => props.onPair(item.id)} className="glass-button-accent text-xs">
                     Pair
+                  </button>
+                )}
+                {waAccount?.linked && (
+                  <button onClick={() => props.onLogout(item.id)} className="glass-button text-xs text-red-400 hover:bg-red-500/10">
+                    <LogOut className="w-3 h-3 mr-1" />
+                    Logout
                   </button>
                 )}
               </div>

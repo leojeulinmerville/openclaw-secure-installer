@@ -6,6 +6,9 @@ use chrono::Utc;
 use uuid::Uuid;
 use std::io::Write;
 use serde_json;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use std::process::Stdio;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -228,10 +231,88 @@ pub async fn start_run(app: AppHandle, run_id: String) -> Result<Run, String> {
     Ok(run)
 }
 
+async fn execute_command_streaming(app: &AppHandle, run_id: &str, mut cmd: Command) -> Result<String, String> {
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn command: {}", e))?;
+
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+
+    let mut stdout_reader = BufReader::new(stdout).lines();
+    let mut stderr_reader = BufReader::new(stderr).lines();
+
+    let app_c = app.clone();
+    let rid_c = run_id.to_string();
+    let stdout_handle = tokio::spawn(async move {
+        let mut full = String::new();
+        while let Ok(Some(line)) = stdout_reader.next_line().await {
+            full.push_str(&line);
+            full.push('\n');
+            let _ = _append_event(&app_c, &rid_c, "run.log", serde_json::json!({ "stream": "stdout", "content": line }));
+        }
+        full
+    });
+
+    let app_c2 = app.clone();
+    let rid_c2 = run_id.to_string();
+    let stderr_handle = tokio::spawn(async move {
+        while let Ok(Some(line)) = stderr_reader.next_line().await {
+            let _ = _append_event(&app_c2, &rid_c2, "run.log", serde_json::json!({ "stream": "stderr", "content": line }));
+        }
+    });
+
+    let status = child.wait().await.map_err(|e| e.to_string())?;
+    let full_stdout = stdout_handle.await.map_err(|e| e.to_string())?;
+    let _ = stderr_handle.await;
+
+    if status.success() {
+        Ok(full_stdout)
+    } else {
+        Err(format!("Command failed with exit code: {:?}", status.code()))
+    }
+}
+
+fn discover_artifacts(app: &AppHandle, run_id: &str, workspace_path: &str) -> Result<(), String> {
+    let workspace = Path::new(workspace_path);
+    if !workspace.exists() { return Ok(()); }
+
+    fn visit_dirs(app: &AppHandle, run_id: &str, dir: &Path, root: &Path) -> Result<(), String> {
+        if dir.is_dir() {
+            let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
+            for entry in entries {
+                let entry = entry.map_err(|e| e.to_string())?;
+                let path = entry.path();
+                
+                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                    if name == "node_modules" || name == ".git" || name == ".openclaw" || name == ".pi" || name == "dist" {
+                        continue;
+                    }
+                }
+
+                if path.is_dir() {
+                    visit_dirs(app, run_id, &path, root)?;
+                } else {
+                    let rel_path = path.strip_prefix(root).map_err(|e| e.to_string())?;
+                    let name = rel_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
+                    
+                    let _ = _append_event(app, run_id, "artifact.created", serde_json::json!({
+                        "name": name,
+                        "path": rel_path.to_string_lossy(),
+                        "type": "file"
+                    }));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    visit_dirs(app, run_id, workspace, workspace)
+}
+
 async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model: &str, prompt: &str, workspace: &str) {
-    // 1. Check Internet/Secrets if needed
-    let allow_internet = crate::state_manager::get_allow_internet(app.clone()).await.unwrap_or(false);
-    
     // Determine the openclaw bin path
     let cwd = std::env::current_dir().unwrap_or_default();
     let dev_script1 = cwd.join("../../scripts/run-node.mjs");
@@ -247,50 +328,36 @@ async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model
         "openclaw".to_string()
     };
 
-    let mut get_cmd = || -> std::process::Command {
-        let mut cmd = std::process::Command::new(&base_cmd);
+    let get_base_cmd = || -> (String, Vec<String>) {
         if dev_script1.exists() {
-            cmd.arg(dev_script1.to_string_lossy().to_string());
-            if let Some(parent) = dev_script1.parent().and_then(|p| p.parent()) {
-                cmd.current_dir(parent);
-            }
+            ("node".to_string(), vec![dev_script1.to_string_lossy().to_string()])
         } else if dev_script2.exists() {
-            cmd.arg(dev_script2.to_string_lossy().to_string());
-            if let Some(parent) = dev_script2.parent().and_then(|p| p.parent()) {
-                cmd.current_dir(parent);
-            }
+            ("node".to_string(), vec![dev_script2.to_string_lossy().to_string()])
+        } else {
+            (base_cmd.clone(), vec![])
         }
-        cmd
     };
+
+    let (cmd_bin, cmd_init_args) = get_base_cmd();
     
     let _ = _append_event(app, run_id, "agent.setup", serde_json::json!({ "workspace": workspace, "model": model, "provider": provider }));
     
-    // Command 1: Add Agent (creates agent config if it doesn't exist)
-    let mut add_cmd = get_cmd();
-    let add_status = add_cmd
-        .arg("agents")
-        .arg("add")
-        .arg(run_id)
-        .arg("--workspace")
-        .arg(workspace)
-        .arg("--model")
-        .arg(model)
-        .arg("--non-interactive")
-        .output();
+    // Command 1: Add Agent
+    let mut add_cmd = Command::new(&cmd_bin);
+    add_cmd.args(&cmd_init_args);
+    add_cmd.arg("agents").arg("add").arg(run_id)
+        .arg("--workspace").arg(workspace)
+        .arg("--model").arg(model)
+        .arg("--non-interactive");
 
-    match add_status {
-        Ok(out) if out.status.success() => {
-             let _ = _append_event(app, run_id, "agent.setup_ok", serde_json::json!({ "output": String::from_utf8_lossy(&out.stdout).to_string() }));
-        }
-        Ok(out) => {
-             let err_msg = String::from_utf8_lossy(&out.stderr).to_string();
-             let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Failed to configure agent: {}", err_msg) }));
-             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("Agent Setup Failed".to_string())).await;
-             return;
+    match execute_command_streaming(app, run_id, add_cmd).await {
+        Ok(stdout) => {
+             let _ = _append_event(app, run_id, "agent.setup_ok", serde_json::json!({ "output": stdout }));
         }
         Err(e) => {
-             // Fallback for dev mode if `openclaw` binary not found globally.
-             let _ = _append_event(app, run_id, "agent.setup_warning", serde_json::json!({ "reason": format!("Command not found, assuming dev environment: {}", e) }));
+             let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Failed to configure agent: {}", e) }));
+             let _ = update_run_status(app, run_id, RunStatus::Failed, Some("Agent Setup Failed".to_string())).await;
+             return;
         }
     }
 
@@ -298,40 +365,31 @@ async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model
     let _ = _append_event(app, run_id, "llm.requested", serde_json::json!({ "prompt": prompt, "agent_id": run_id }));
     let _ = update_run_status(app, run_id, RunStatus::Running, None).await;
 
-    // Use openclaw CLI to run the agent
-    let mut run_cmd = get_cmd();
-    let cmd = run_cmd
-        .arg("agent")
-        .arg("--agent")
-        .arg(run_id)
-        .arg("--provider")
-        .arg(provider)
-        .arg("--model")
-        .arg(model)
-        .arg("--message")
-        .arg(prompt)
-        .arg("--local")
-        .output();
+    let mut run_cmd = Command::new(&cmd_bin);
+    run_cmd.args(&cmd_init_args);
+    run_cmd.arg("agent").arg("--agent").arg(run_id)
+        .arg("--provider").arg(provider)
+        .arg("--model").arg(model)
+        .arg("--message").arg(prompt)
+        .arg("--local");
 
-    match cmd {
-        Ok(out) => {
-            if out.status.success() {
-                let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-                let _ = _append_event(app, run_id, "llm.completed", serde_json::json!({ "output": stdout }));
-                let _ = _append_event(app, run_id, "agent.message", serde_json::json!({ "role": "assistant", "content": stdout }));
-                let _ = update_run_status(app, run_id, RunStatus::Done, None).await;
-            } else {
-                let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-                let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Agent CLI error: {}", stderr) }));
-                let _ = update_run_status(app, run_id, RunStatus::Failed, Some(stderr)).await;
-            }
+    match execute_command_streaming(app, run_id, run_cmd).await {
+        Ok(stdout) => {
+            let _ = _append_event(app, run_id, "llm.completed", serde_json::json!({ "output": stdout }));
+            let _ = _append_event(app, run_id, "agent.message", serde_json::json!({ "role": "assistant", "content": stdout }));
+            
+            // Artifact discovery
+            let _ = discover_artifacts(app, run_id, workspace);
+            
+            let _ = update_run_status(app, run_id, RunStatus::Done, None).await;
         }
         Err(e) => {
-            let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Failed to execute agent CLI: {}", e) }));
-            let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e.to_string())).await;
+            let _ = _append_event(app, run_id, "run.failed", serde_json::json!({ "reason": format!("Agent CLI error: {}", e) }));
+            let _ = update_run_status(app, run_id, RunStatus::Failed, Some(e)).await;
         }
     }
 }
+
 
 async fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, error: Option<String>) -> Result<(), String> {
      if let Ok(mut run) = get_run(app.clone(), run_id.to_string()).await {

@@ -9,6 +9,7 @@ mod agents;
 mod chat;
 mod runs;
 mod patch;
+mod channels;
 
 fn main() {
   tauri::Builder::default()
@@ -38,6 +39,7 @@ fn main() {
         gateway::open_app_data_folder,
         gateway::docker_smoke_test,
         gateway::check_gateway_health,
+        gateway::test_gateway_ollama_access,
         gateway::test_gateway_ollama_access,
         gateway::build_local_image,
         gateway::get_gateway_status,
@@ -80,6 +82,10 @@ fn main() {
         runs::submit_approval,
         runs::read_workspace_file,
         runs::delete_run,
+        // Channels
+        channels::whatsapp_login_start,
+        channels::whatsapp_login_wait,
+        channels::whatsapp_logout,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

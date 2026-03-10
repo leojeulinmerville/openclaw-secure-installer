@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "D:/MVP/openclaw-secure-installer"],
+      "description": "Accès local sécurisé au repo OpenClaw (Surgical Scoping)"
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_TOKEN_HERE"
+      },
+      "description": "Gestion des issues et PR du repo OpenClaw"
+    },
+    "playwright": {
+      "command": "playwright-mcp",
+      "args": [],
+      "description": "Tests E2E et validation UI (Phase 3)"
+    },
+    "docker": {
+      "command": "npx",
+      "args": ["-y", "mcp-server-docker"],
+      "description": "Inspection des containers Gateway et Sandboxes"
+    },
+    "fetch": {
+      "command": "mcp-server-fetch-typescript",
+      "args": [],
+      "description": "Récupération de doc technique (LM Studio, Tauri v2)"
+    }
+  }
+}

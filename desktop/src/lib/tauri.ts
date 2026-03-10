@@ -23,6 +23,8 @@ import type {
   ConnectionKind,
   ConnectionOperationResult,
   ChatSession,
+  WhatsAppLoginStartResult,
+  WhatsAppLoginWaitResult,
 } from '../types';
 
 // ── Docker ──────────────────────────────────────────────────────────
@@ -199,6 +201,22 @@ export const readWorkspaceFile = (runId: string, relativePath: string) =>
 
 export const deleteRun = (runId: string) =>
   invoke<void>('delete_run', { runId });
+
+// ── Channels ────────────────────────────────────────────────────────
+export const whatsappLoginStart = (opts: {
+  accountId?: string;
+  force: boolean;
+  timeoutMs?: number;
+  verbose: boolean;
+}) => invoke<WhatsAppLoginStartResult>('whatsapp_login_start', { opts });
+
+export const whatsappLoginWait = (opts: {
+  accountId?: string;
+  timeoutMs?: number;
+}) => invoke<WhatsAppLoginWaitResult>('whatsapp_login_wait', { opts });
+
+export const whatsappLogout = (accountId?: string) =>
+  invoke<void>('whatsapp_logout', { accountId });
 
 export const openExternal = (url: string) => open(url);
 

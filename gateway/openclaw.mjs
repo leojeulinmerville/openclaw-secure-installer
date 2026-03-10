@@ -67,6 +67,8 @@ const server = createServer(async (req, res) => {
   const path = url.pathname.replace(/\/+$/, "") || "/";
   const method = req.method;
 
+  log("debug", `${method} ${url.pathname} (normalized: ${path})`);
+
   // ── Health ──────────────────────────────────────────────────────
   if (path === "/health" || path === "/api/v1/health") {
     const uptimeMs = Date.now() - startTime;
@@ -168,6 +170,22 @@ const server = createServer(async (req, res) => {
     });
     res.end();
     log("info", `Auth bootstrap success, redirecting to ${redirectUrl}`);
+    return;
+  }
+
+  // ── WhatsApp Login Stubs ────────────────────────────────────────
+  if (path === "/api/v1/web.login.start") {
+    json(res, 200, {
+      qrDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
+      message: "MVP Mode: This is a placeholder QR code. Use the full orchestrator for real WhatsApp pairing."
+    });
+    return;
+  }
+
+  if (path === "/api/v1/web.login.wait") {
+    // Wait a bit then return success in MVP mode
+    await new Promise(r => setTimeout(r, 2000));
+    json(res, 200, { connected: true, message: "MVP Mode: Mock connection successful." });
     return;
   }
 

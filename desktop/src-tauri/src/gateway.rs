@@ -435,7 +435,7 @@ async fn bootstrap_local_session_cookie(
         .ok_or_else(|| "Console bootstrap returned an invalid session cookie.".to_string())
 }
 
-async fn call_gateway_connections_api(
+pub(crate) async fn call_gateway_connections_api(
     app: &AppHandle,
     method: reqwest::Method,
     path: &str,

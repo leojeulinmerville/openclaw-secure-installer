@@ -208,6 +208,16 @@ export interface ConnectionsStatusResponse {
   providers: ConnectionStatusItem[];
 }
 
+export interface WhatsAppLoginStartResult {
+  qrDataUrl?: string;
+  message: string;
+}
+
+export interface WhatsAppLoginWaitResult {
+  connected: boolean;
+  message: string;
+}
+
 export interface ConnectionOperationResult {
   ok: boolean;
   kind: ConnectionKind;
@@ -354,6 +364,7 @@ export type EventType =
   | 'llm.completed'
   | 'patch.apply.succeeded'
   | 'patch.apply.failed'
+  | 'run.log'
   // allow any future types without breaking
   | (string & {});
 
