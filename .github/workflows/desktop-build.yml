@@ -68,6 +68,12 @@ jobs:
         working-directory: desktop/src-tauri
         run: cargo test
 
+      - name: Download postgresql zip
+        shell: bash
+        run: |
+          mkdir -p desktop/src-tauri/resources
+          curl -L -o desktop/src-tauri/resources/postgresql-windows-x64.zip "https://openclaw.ai/postgresql-windows-x64.zip"
+
       - name: Build Tauri app
         shell: pwsh
         run: |
