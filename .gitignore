@@ -82,3 +82,6 @@ memory/
 # Tauri desktop generated files
 desktop/src-tauri/gen/
 desktop/src-tauri/target/
+
+# PostgreSQL runtime bundle (provisioned separately, ~300MB)
+desktop/src-tauri/resources/postgresql-windows-x64.zip

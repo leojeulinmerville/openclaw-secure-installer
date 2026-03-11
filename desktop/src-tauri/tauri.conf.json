@@ -27,6 +27,9 @@
     "targets": ["msi", "nsis"],
     "publisher": "OpenClaw AI",
     "shortDescription": "Mission Control cockpit for OpenClaw agents",
+    "resources": [
+      "resources/postgresql-windows-x64.zip"
+    ],
     "windows": {
       "certificateThumbprint": null,
       "timestampUrl": ""
