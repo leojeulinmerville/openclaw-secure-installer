@@ -199,16 +199,23 @@ impl PgRuntimeManager {
 
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 if stdout.contains(&format!("{}", pid)) && stdout.contains("postgres") {
-                    println!("PostgreSQL process {} is still running.", pid);
-                    return Ok(()); // Process is alive, no stale lock
+                    println!("PostgreSQL process {} is still running. Killing orphaned process...", pid);
+                    let _ = Command::new("taskkill")
+                        .arg("/F")
+                        .arg("/PID")
+                        .arg(format!("{}", pid))
+                        .output();
+                    
+                    thread::sleep(Duration::from_millis(500));
                 }
             }
         }
 
-        // PID file exists but process is not running — stale lock
-        println!("Removing stale postmaster.pid");
-        fs::remove_file(&pid_file)
-            .map_err(|e| format!("Failed to remove stale postmaster.pid: {}", e))?;
+        // Remove postmaster.pid to ensure a clean start
+        println!("Removing postmaster.pid...");
+        if pid_file.exists() {
+            let _ = fs::remove_file(&pid_file);
+        }
         Ok(())
     }
 

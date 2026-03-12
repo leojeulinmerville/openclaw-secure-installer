@@ -160,3 +160,26 @@ Default file:
 - Raw stream logs can include full prompts, tool output, and user data.
 - Keep logs local and delete them after debugging.
 - If you share logs, scrub secrets and PII first.
+
+## PostgreSQL Tauri Bootstrap Issues
+
+When developing the desktop app (Tauri), the `postgres.exe` runtime is started dynamically on an available port. 
+
+If the development process is forcefully killed or crashes, the `postgres.exe` process might survive and leave a lock on the `data/pgsql` directory via `postmaster.pid`.
+
+**Symptom:**
+During `pnpm tauri dev` or app startup, you see:
+```text
+[bootstrap] FATAL: wait_for_ready failed: PostgreSQL did not become ready within 15 seconds
+```
+
+**What happens:**
+The app detects the stale lock but fails to start on the new port because the old instance is still holding the data directory.
+
+**Resolution:**
+The bootstrap process in `runtime_pgsql.rs` (`handle_stale_lock`) automatically detects and forcefully kills the orphaned `postgres.exe` if its PID matches the `postmaster.pid` file. If this fails manually kill `postgres.exe`:
+
+```powershell
+Stop-Process -Name "postgres" -Force
+```
+Then delete the `postmaster.pid` file in the data directory if it still exists before restarting the app.
