@@ -180,7 +180,7 @@ async fn chat_openai(app: &AppHandle, request: &ChatRequest) -> Result<ChatRespo
 async fn chat_lmstudio(request: &ChatRequest) -> Result<ChatResponse, String> {
     let endpoint = request.api_base
         .clone()
-        .unwrap_or_else(|| "http://localhost:1234/v1".to_string());
+        .unwrap_or_else(|| "http://127.0.0.1:1234/v1".to_string());
 
     let url = format!("{}/chat/completions", endpoint.trim_end_matches('/'));
 
@@ -244,7 +244,7 @@ async fn chat_lmstudio(request: &ChatRequest) -> Result<ChatResponse, String> {
 async fn chat_ollama(request: &ChatRequest) -> Result<ChatResponse, String> {
     let endpoint = request.ollama_endpoint
         .clone()
-        .unwrap_or_else(|| "http://localhost:11434".to_string());
+        .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
 
     let url = format!("{}/api/chat", endpoint.trim_end_matches('/'));
 
@@ -390,7 +390,7 @@ pub async fn delete_chat(app: AppHandle, id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn test_ollama_connection(endpoint: Option<String>) -> Result<bool, String> {
-    let endpoint = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
     let url = format!("{}/api/tags", endpoint.trim_end_matches('/'));
 
     let client = reqwest::Client::builder()
@@ -406,7 +406,7 @@ pub async fn test_ollama_connection(endpoint: Option<String>) -> Result<bool, St
 
 #[tauri::command]
 pub async fn lmstudio_list_models(endpoint: Option<String>) -> Result<Vec<String>, String> {
-    let base = endpoint.unwrap_or_else(|| "http://localhost:1234/v1".to_string());
+    let base = endpoint.unwrap_or_else(|| "http://127.0.0.1:1234/v1".to_string());
     let url = format!("{}/models", base.trim_end_matches('/'));
     
     let client = reqwest::Client::builder()
@@ -429,6 +429,97 @@ pub async fn lmstudio_list_models(endpoint: Option<String>) -> Result<Vec<String
         },
         Err(e) => Err(format!("Connection failed: {}", e))
     }
+}
+
+// ── Additional Ollama Wizard Commands ───────────────────────────────
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OllamaModelItem {
+    pub name: String,
+    pub size: u64,
+    pub digest: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaTagsResponse {
+    models: Vec<OllamaModelItem>,
+}
+
+#[tauri::command]
+pub async fn ollama_test(endpoint: Option<String>) -> Result<String, String> {
+    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    let url = format!("{}/api/version", endpoint.trim_end_matches('/'));
+    
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+        
+    let res = client.get(&url).send().await.map_err(|e| format!("Connection failed: {}", e))?;
+    let text = res.text().await.unwrap_or_default();
+    Ok(text)
+}
+
+#[tauri::command]
+pub async fn ollama_list_models(endpoint: Option<String>) -> Result<Vec<OllamaModelItem>, String> {
+    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    let url = format!("{}/api/tags", endpoint.trim_end_matches('/'));
+    
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+        
+    let res = client.get(&url).send().await.map_err(|e| format!("Connection failed: {}", e))?;
+    if !res.status().is_success() {
+        return Err(format!("Ollama error: {}", res.status()));
+    }
+    let parsed: OllamaTagsResponse = res.json().await.map_err(|e| format!("Parse error: {}", e))?;
+    Ok(parsed.models)
+}
+
+#[tauri::command]
+pub async fn ollama_pull_model(endpoint: Option<String>, model: String) -> Result<(), String> {
+    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    let url = format!("{}/api/pull", endpoint.trim_end_matches('/'));
+
+    let client = reqwest::Client::builder()
+        // 10 minute timeout for large model downloads
+        .timeout(std::time::Duration::from_secs(600))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let body = serde_json::json!({
+        "name": model,
+        "stream": false
+    });
+
+    let res = client.post(&url).json(&body).send().await.map_err(|e| format!("Pull block failed: {}", e))?;
+    
+    let status = res.status();
+    if !status.is_success() {
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("Pull failed ({}): {}", status, text));
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn ollama_run_test_completion(endpoint: Option<String>, model: String) -> Result<String, String> {
+    let req = ChatRequest {
+        provider: "ollama".to_string(),
+        model,
+        messages: vec![ChatMessage { 
+            role: "user".to_string(), 
+            content: "Hi. Reply with the exact word 'READY' and nothing else.".to_string() 
+        }],
+        ollama_endpoint: endpoint.clone(),
+        api_base: None,
+    };
+    
+    let res = chat_ollama(&req).await?;
+    Ok(res.message.content)
 }
 
 // ── Tests ───────────────────────────────────────────────────────────
