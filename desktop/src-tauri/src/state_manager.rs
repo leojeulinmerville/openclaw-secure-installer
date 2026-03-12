@@ -243,7 +243,7 @@ pub async fn configure_installation(
   fs::write(dir.join(".env"), env_content).map_err(|e| e.to_string())?;
 
   // Write docker-compose.yml with chosen image
-  let compose_content = generate_compose_content(&image);
+  let compose_content = generate_compose_content(&image, http_port);
   fs::write(dir.join("docker-compose.yml"), compose_content).map_err(|e| e.to_string())?;
 
   // Update state

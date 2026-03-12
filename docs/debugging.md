@@ -197,6 +197,35 @@ If the target service (e.g., Docker port mapping or Ollama server) is only bindi
 **Resolution:**
 - Always use `http://127.0.0.1:<port>` instead of `http://localhost:<port>` in frontend (`ConnectOllama.tsx`), Tauri commands (`chat.rs`), and raw health probes (`probe_health` in `gateway.rs`). This forces IPv4 and instantly bypasses the local DNS resolution delay.
 
+## Gateway Container "Unhealthy" (Port Mapping Mismatch)
+
+When using a custom HTTP port in the Desktop UI (e.g., `18789`), the `docker-compose.yml` generation must accurately reflect this mapping. 
+
+**Root Cause:**
+1. The user configures `OPENCLAW_HTTP_PORT=18789`.
+2. The Desktop correctly attempts to health check `127.0.0.1:18789`.
+3. If the generated `docker-compose.yml` incorrectly hardcodes `8080:8080`, the container will listen on `8080`, while the Desktop pings `18789`.
+
+**Resolution:**
+- Ensure `generate_compose_content` in `gateway.rs` uses the dynamic `http_port` to create a mapping like `18789:8080` (where `8080` is the fixed internal container port).
+
+## Gateway Health Check Body Match (ok vs healthy)
+
+The Desktop's internal health check logic performs a raw TCP probe and inspects the HTTP response body.
+
+**Root Cause:**
+- If the probe is hardcoded to look for the string `"healthy"` but the Gateway API returns `{"status":"ok"}`, the health check will fail and mark the container as "Unhealthy" even if the server is running perfectly.
+
+**Resolution:**
+- The `probe_health` function in `gateway.rs` must be updated to look for `"ok"` instead of `"healthy"`.
+
+## Production Data Persistence (openclaw_home Volume)
+
+Default Docker Compose setups often use ephemeral storage by default. To ensure your database, sessions, and configurations persist across Gateway updates or container restarts, a volume is required.
+
+**Implementation:**
+- The OpenClaw production compose setup uses a named volume `openclaw_home` mapped to `/home/node`. This ensures `~/.openclaw` data inside the container is stored safely on the host's Docker volume system.
+
 ## Ollama Model Detection Returning Empty Result
 
 By design, the OpenClaw wizard requires a locally hosted Ollama instance to list its available models. Sometimes, the wizard may successfully connect to Ollama but the models list remains empty.

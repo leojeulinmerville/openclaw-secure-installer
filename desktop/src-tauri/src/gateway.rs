@@ -732,7 +732,7 @@ fn probe_health(port: u16) -> HealthCheckResult {
         .unwrap_or("")
         .to_string();
 
-    let healthy = status_code == Some(200) && body.contains("healthy");
+    let healthy = status_code == Some(200) && body.contains("ok");
 
     HealthCheckResult {
         healthy,
@@ -741,7 +741,7 @@ fn probe_health(port: u16) -> HealthCheckResult {
         error: if healthy {
             None
         } else {
-            Some("Health check did not return 200/healthy".into())
+            Some("Health check did not return 200/ok".into())
         },
     }
 }
@@ -878,13 +878,13 @@ fn build_remediation(
 
 // ── Compose file rewrite ────────────────────────────────────────────
 
-pub fn generate_compose_content(image: &str) -> String {
+pub fn generate_compose_content(image: &str, http_port: u16) -> String {
     format!(
         r#"services:
   gateway:
-    image: {}
+    image: {0}
     ports:
-      - "8080:8080"
+      - "{1}:8080"
     environment:
       OPENCLAW_SAFE_MODE: "1"
       LOG_LEVEL: info
@@ -893,13 +893,49 @@ pub fn generate_compose_content(image: &str) -> String {
       OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: "${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}"
       OPENCLAW_ALLOW_INTERNET: "${{OPENCLAW_ALLOW_INTERNET:-0}}"
     restart: unless-stopped
+    volumes:
+      - openclaw_home:/home/node
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+
+  cli:
+    image: {0}
+    environment:
+      OPENCLAW_SAFE_MODE: "1"
+      LOG_LEVEL: info
+      OPENCLAW_CONTAINER_PORT: "8080"
+      OPENCLAW_GATEWAY_TOKEN: "${{OPENCLAW_GATEWAY_TOKEN:-}}"
+      OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: "${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}"
+      OPENCLAW_ALLOW_INTERNET: "${{OPENCLAW_ALLOW_INTERNET:-0}}"
+    entrypoint: [ "node", "openclaw.mjs" ]
+    stdin_open: true
+    tty: true
+    volumes:
+      - openclaw_home:/home/node
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
 
 networks:
   default:
     name: openclaw-managed
 
+volumes:
+  openclaw_home:
+
 "#,
-        image
+        image,
+        http_port
     )
 }
 
@@ -987,7 +1023,8 @@ pub async fn start_gateway(app: AppHandle) -> Result<GatewayStartResult, String>
         } else {
             state.gateway_image.clone()
         };
-        let content = generate_compose_content(&image);
+        let http_port = read_http_port(&dir);
+        let content = generate_compose_content(&image, http_port);
         if let Err(e) = std::fs::create_dir_all(&dir) {
             return Ok(GatewayStartResult {
                 gateway_active: false,
@@ -1372,7 +1409,8 @@ pub async fn build_local_image(context_path: String) -> Result<BuildResult, Stri
 pub async fn update_compose_image(app: AppHandle, image: String) -> Result<String, String> {
     let dir = get_app_data_dir(&app)?;
     let compose_file = dir.join("docker-compose.yml");
-    let content = generate_compose_content(&image);
+    let http_port = read_http_port(&dir);
+    let content = generate_compose_content(&image, http_port);
     std::fs::write(&compose_file, content).map_err(|e| e.to_string())?;
     Ok(compose_file.display().to_string())
 }
@@ -1953,20 +1991,20 @@ mod tests {
 
     #[test]
     fn test_generate_compose_uses_custom_image() {
-        let content = generate_compose_content("ghcr.io/myorg/gateway:v1.2.3");
+        let content = generate_compose_content("ghcr.io/myorg/gateway:v1.2.3", 8080);
         assert!(content.contains("image: ghcr.io/myorg/gateway:v1.2.3"));
         assert!(!content.contains("openclaw:latest"));
     }
 
     #[test]
     fn test_generate_compose_uses_local_dev_image() {
-        let content = generate_compose_content("openclaw-gateway:dev");
+        let content = generate_compose_content("openclaw-gateway:dev", 8080);
         assert!(content.contains("image: openclaw-gateway:dev"));
     }
 
     #[test]
     fn test_compose_maps_host_to_container_8080() {
-        let content = generate_compose_content("openclaw-gateway:dev");
+        let content = generate_compose_content("openclaw-gateway:dev", 8080);
         assert!(
             content.contains("\"8080:8080\""),
             "Compose must map container port 8080 to host 8080"
@@ -1975,7 +2013,7 @@ mod tests {
 
     #[test]
     fn test_compose_has_container_port_env() {
-        let content = generate_compose_content("openclaw-gateway:dev");
+        let content = generate_compose_content("openclaw-gateway:dev", 8080);
         assert!(
             content.contains("OPENCLAW_CONTAINER_PORT:"),
             "Compose must set OPENCLAW_CONTAINER_PORT"
@@ -1984,7 +2022,7 @@ mod tests {
 
     #[test]
     fn test_compose_forwards_gateway_auth_env_vars() {
-        let content = generate_compose_content("openclaw-gateway:dev");
+        let content = generate_compose_content("openclaw-gateway:dev", 8080);
         assert!(
             content.contains("OPENCLAW_GATEWAY_TOKEN:"),
             "Compose must forward OPENCLAW_GATEWAY_TOKEN at runtime"
