@@ -180,7 +180,7 @@ async fn chat_openai(app: &AppHandle, request: &ChatRequest) -> Result<ChatRespo
 async fn chat_lmstudio(request: &ChatRequest) -> Result<ChatResponse, String> {
     let endpoint = request.api_base
         .clone()
-        .unwrap_or_else(|| "http://127.0.0.1:1234/v1".to_string());
+        .unwrap_or_else(|| "http://localhost:1234/v1".to_string());
 
     let url = format!("{}/chat/completions", endpoint.trim_end_matches('/'));
 
@@ -244,7 +244,7 @@ async fn chat_lmstudio(request: &ChatRequest) -> Result<ChatResponse, String> {
 async fn chat_ollama(request: &ChatRequest) -> Result<ChatResponse, String> {
     let endpoint = request.ollama_endpoint
         .clone()
-        .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+        .unwrap_or_else(|| "http://localhost:11434".to_string());
 
     let url = format!("{}/api/chat", endpoint.trim_end_matches('/'));
 
@@ -390,7 +390,7 @@ pub async fn delete_chat(app: AppHandle, id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn test_ollama_connection(endpoint: Option<String>) -> Result<bool, String> {
-    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    let endpoint = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
     let url = format!("{}/api/tags", endpoint.trim_end_matches('/'));
 
     let client = reqwest::Client::builder()
@@ -406,7 +406,7 @@ pub async fn test_ollama_connection(endpoint: Option<String>) -> Result<bool, St
 
 #[tauri::command]
 pub async fn lmstudio_list_models(endpoint: Option<String>) -> Result<Vec<String>, String> {
-    let base = endpoint.unwrap_or_else(|| "http://127.0.0.1:1234/v1".to_string());
+    let base = endpoint.unwrap_or_else(|| "http://localhost:1234/v1".to_string());
     let url = format!("{}/models", base.trim_end_matches('/'));
     
     let client = reqwest::Client::builder()
@@ -447,7 +447,7 @@ struct OllamaTagsResponse {
 
 #[tauri::command]
 pub async fn ollama_test(endpoint: Option<String>) -> Result<String, String> {
-    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    let endpoint = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
     let url = format!("{}/api/version", endpoint.trim_end_matches('/'));
     
     let client = reqwest::Client::builder()
@@ -462,7 +462,7 @@ pub async fn ollama_test(endpoint: Option<String>) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn ollama_list_models(endpoint: Option<String>) -> Result<Vec<OllamaModelItem>, String> {
-    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    let endpoint = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
     let url = format!("{}/api/tags", endpoint.trim_end_matches('/'));
     
     let client = reqwest::Client::builder()
@@ -480,7 +480,7 @@ pub async fn ollama_list_models(endpoint: Option<String>) -> Result<Vec<OllamaMo
 
 #[tauri::command]
 pub async fn ollama_pull_model(endpoint: Option<String>, model: String) -> Result<(), String> {
-    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+    let endpoint = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
     let url = format!("{}/api/pull", endpoint.trim_end_matches('/'));
 
     let client = reqwest::Client::builder()

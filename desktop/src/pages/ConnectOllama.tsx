@@ -23,19 +23,19 @@ const CURATED_MODELS = [
 ];
 
 async function checkLocalConnection(): Promise<string> {
-  return await invoke('ollama_test', { endpoint: 'http://127.0.0.1:11434' });
+  return await invoke('ollama_test', { endpoint: 'http://localhost:11434' });
 }
 
 async function listModels(): Promise<OllamaModel[]> {
-  return await invoke('ollama_list_models', { endpoint: 'http://127.0.0.1:11434' });
+  return await invoke('ollama_list_models', { endpoint: 'http://localhost:11434' });
 }
 
 async function pullModel(model: string): Promise<void> {
-  return await invoke('ollama_pull_model', { endpoint: 'http://127.0.0.1:11434', model });
+  return await invoke('ollama_pull_model', { endpoint: 'http://localhost:11434', model });
 }
 
 async function testCompletion(model: string): Promise<string> {
-  return await invoke('ollama_run_test_completion', { endpoint: 'http://127.0.0.1:11434', model });
+  return await invoke('ollama_run_test_completion', { endpoint: 'http://localhost:11434', model });
 }
 
 export function ConnectOllama({ onBack, onConnected }: Props) {
@@ -160,7 +160,7 @@ export function ConnectOllama({ onBack, onConnected }: Props) {
                 {checking ? 'Detecting Ollama…' : error ? 'Not Detected' : 'Ollama Connected'}
               </h3>
 
-              {checking && <p className="text-white/60 text-sm">Checking http://127.0.0.1:11434 …</p>}
+              {checking && <p className="text-white/60 text-sm">Checking http://localhost:11434 …</p>}
 
               {error && (
                 <div className="space-y-3">

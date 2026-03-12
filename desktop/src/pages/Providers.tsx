@@ -223,10 +223,10 @@ function OllamaWizard({ onNavigate }: Props) {
 
     try {
       // Step 2: Check Localhost directly (from Tauri/browser side)
-      const localReachable = await testOllamaConnection('http://127.0.0.1:11434');
+      const localReachable = await testOllamaConnection('http://localhost:11434');
       if (!localReachable) {
         setLocalOk(false);
-        setErrorMsg('Could not reach Ollama at http://127.0.0.1:11434.');
+        setErrorMsg('Could not reach Ollama at http://localhost:11434.');
         setLoading(false);
         return;
       }
@@ -237,7 +237,7 @@ function OllamaWizard({ onNavigate }: Props) {
       if (!gatewayReachable) {
         setGatewayOk(false);
         setErrorMsg(
-          'Gateway container could not reach Ollama at http://127.0.0.1:11434.'
+          'Gateway container could not reach Ollama at http://localhost:11434.'
         );
         setLoading(false);
         return;
@@ -357,7 +357,7 @@ function LMStudioWizard() {
     setLoading(true);
     setErrorMsg('');
     try {
-      const result = await lmstudioListModels('http://127.0.0.1:1234/v1');
+      const result = await lmstudioListModels('http://localhost:1234/v1');
       if (result && result.length > 0) {
         setModels(result.map((m: any) => typeof m === 'string' ? m : m.name || m.id));
       } else {

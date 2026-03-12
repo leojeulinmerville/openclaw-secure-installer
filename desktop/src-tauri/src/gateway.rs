@@ -661,28 +661,40 @@ fn probe_health(port: u16) -> HealthCheckResult {
     use std::net::TcpStream;
     use std::time::Duration;
 
-    let addr = format!("127.0.0.1:{}", port);
-    let parsed: std::net::SocketAddr = match addr.parse() {
+    let addr_str = format!("localhost:{}", port);
+    let addrs = match std::net::ToSocketAddrs::to_socket_addrs(&addr_str) {
         Ok(a) => a,
         Err(e) => {
             return HealthCheckResult {
                 healthy: false,
                 status_code: None,
                 body: String::new(),
-                error: Some(format!("Invalid address {}: {}", addr, e)),
+                error: Some(format!("DNS resolution failed for {}: {}", addr_str, e)),
             };
         }
     };
 
-    let stream = TcpStream::connect_timeout(&parsed, Duration::from_secs(3));
+    let mut stream = None;
+    let mut last_err = None;
+
+    for addr in addrs {
+        match TcpStream::connect_timeout(&addr, Duration::from_secs(3)) {
+            Ok(s) => {
+                stream = Some(s);
+                break;
+            }
+            Err(e) => last_err = Some(e),
+        }
+    }
+
     let mut stream = match stream {
-        Ok(s) => s,
-        Err(e) => {
+        Some(s) => s,
+        None => {
             return HealthCheckResult {
                 healthy: false,
                 status_code: None,
                 body: String::new(),
-                error: Some(format!("Connection to {} failed: {}", addr, e)),
+                error: Some(format!("Connection to {} failed: {:?}", addr_str, last_err)),
             };
         }
     };
