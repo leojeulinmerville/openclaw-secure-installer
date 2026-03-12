@@ -661,7 +661,7 @@ fn probe_health(port: u16) -> HealthCheckResult {
     use std::net::TcpStream;
     use std::time::Duration;
 
-    let addr_str = format!("localhost:{}", port);
+    let addr_str = format!("127.0.0.1:{}", port);
     let addrs = match std::net::ToSocketAddrs::to_socket_addrs(&addr_str) {
         Ok(a) => a,
         Err(e) => {

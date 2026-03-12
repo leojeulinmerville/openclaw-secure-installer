@@ -447,7 +447,7 @@ struct OllamaTagsResponse {
 
 #[tauri::command]
 pub async fn ollama_test(endpoint: Option<String>) -> Result<String, String> {
-    let endpoint = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
     let url = format!("{}/api/version", endpoint.trim_end_matches('/'));
     
     let client = reqwest::Client::builder()
@@ -462,7 +462,7 @@ pub async fn ollama_test(endpoint: Option<String>) -> Result<String, String> {
 
 #[tauri::command]
 pub async fn ollama_list_models(endpoint: Option<String>) -> Result<Vec<OllamaModelItem>, String> {
-    let endpoint = endpoint.unwrap_or_else(|| "http://localhost:11434".to_string());
+    let endpoint = endpoint.unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
     let url = format!("{}/api/tags", endpoint.trim_end_matches('/'));
     
     let client = reqwest::Client::builder()

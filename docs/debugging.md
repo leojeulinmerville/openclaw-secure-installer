@@ -183,3 +183,31 @@ The bootstrap process in `runtime_pgsql.rs` (`handle_stale_lock`) automatically 
 Stop-Process -Name "postgres" -Force
 ```
 Then delete the `postmaster.pid` file in the data directory if it still exists before restarting the app.
+
+## Gateway Health Check or Ollama Timeouts (Windows IPv6 `::1` Resolution)
+
+When running the application on Windows, using `http://localhost:<port>` to perform health checks or to connect to local services (like Docker Gateway or Ollama) can result in hanging requests or slow timeouts (e.g., 3-5 seconds per request). This is because modern Windows environments resolve `localhost` to the IPv6 loopback address `::1` before trying the IPv4 address `127.0.0.1`.
+
+If the target service (e.g., Docker port mapping or Ollama server) is only binding to IPv4, the initial connection to `::1` will either be silently dropped or refused, causing the request to hang until the `reqwest` or `fetch` timeout is reached. 
+
+**Symptoms:**
+- The Desktop UI reports "Gateway Unhealthy. The gateway container is running but not responding to health checks."
+- Ollama test connection buttons or model listings take more than 3 seconds to respond or fail entirely.
+
+**Resolution:**
+- Always use `http://127.0.0.1:<port>` instead of `http://localhost:<port>` in frontend (`ConnectOllama.tsx`), Tauri commands (`chat.rs`), and raw health probes (`probe_health` in `gateway.rs`). This forces IPv4 and instantly bypasses the local DNS resolution delay.
+
+## Ollama Model Detection Returning Empty Result
+
+By design, the OpenClaw wizard requires a locally hosted Ollama instance to list its available models. Sometimes, the wizard may successfully connect to Ollama but the models list remains empty.
+
+**Symptoms:**
+- The connect step displays "Test Successful" but the "Installed Models" list shows zero items.
+
+**Resolution:**
+- This typically means that the actual Ollama installation on the host machine has zero models pulled.
+- You can verify the raw JSON returned by Ollama manually:
+  ```powershell
+  (Invoke-RestMethod -Uri "http://127.0.0.1:11434/api/tags").models
+  ```
+- If this returns an empty array `{}`, then Ollama is reachable but there are no models physically present on the machine. You must run `ollama run <model>` manually or use the Wizard's Pull option to download one.
