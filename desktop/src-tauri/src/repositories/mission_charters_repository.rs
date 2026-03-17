@@ -1,6 +1,5 @@
 use sqlx::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 pub struct MissionChartersRepository {
     pool: PgPool,

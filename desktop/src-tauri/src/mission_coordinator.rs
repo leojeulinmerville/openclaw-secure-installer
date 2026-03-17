@@ -1,6 +1,6 @@
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::repositories::missions_repository::Mission;
+pub use crate::repositories::missions_repository::Mission;
 use crate::repositories::mission_state_projections_repository::MissionStateProjection;
 use crate::services::mission_service::MissionService;
 use crate::services::projection_service::ProjectionService;
