@@ -4,10 +4,12 @@ import type { AgentListItem } from '../types';
 import { Play, ArrowLeft, Bot, FolderOpen, Loader2, AlertCircle } from 'lucide-react';
 
 interface CreateRunProps {
-  onNavigate: (page: 'runs' | 'run-detail', id?: string) => void;
+  onNavigate: (page: any, id?: string) => void;
+  missionId?: string;
+  contractId?: string;
 }
 
-export function CreateRun({ onNavigate }: CreateRunProps) {
+export function CreateRun({ onNavigate, missionId, contractId }: CreateRunProps) {
   const [agents, setAgents] = useState<AgentListItem[]>([]);
   const [loadingAgents, setLoadingAgents] = useState(true);
   
@@ -81,13 +83,15 @@ export function CreateRun({ onNavigate }: CreateRunProps) {
         agent.model,
         title,
         goal,
-        workspacePath || agent.workspacePath
+        workspacePath || agent.workspacePath,
+        missionId,
+        contractId
       );
       
       // Auto-start the run immediately
       await startRun(run.id);
       // Navigate to the run detail page
-      onNavigate('run-detail' as any, run.id);
+      onNavigate('run-detail', run.id);
     } catch (err) {
       setError(String(err));
       setSubmitting(false);
@@ -122,7 +126,13 @@ export function CreateRun({ onNavigate }: CreateRunProps) {
         <ArrowLeft className="w-4 h-4" /> Back to Runs
       </button>
 
-      <h1 className="text-2xl font-bold text-white mb-6">Start New Run</h1>
+      <h1 className="text-2xl font-bold text-white mb-2">Start New Run</h1>
+      {(missionId || contractId) && (
+        <p className="text-xs text-cyan-400 mb-6 flex items-center gap-2">
+          <AlertCircle className="w-3.5 h-3.5" />
+          Linked to {contractId ? 'Contract' : 'Mission'}
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         {/* Agent Selection */}

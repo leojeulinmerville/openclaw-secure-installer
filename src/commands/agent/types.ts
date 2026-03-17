@@ -74,6 +74,8 @@ export type AgentCommandOpts = {
   lane?: string;
   runId?: string;
   extraSystemPrompt?: string;
+  missionId?: string;
+  contractId?: string;
   /** Per-call stream param overrides (best-effort). */
   streamParams?: AgentStreamParams;
 };

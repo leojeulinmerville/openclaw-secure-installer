@@ -12,6 +12,10 @@ mod patch;
 mod channels;
 mod runtime_pgsql;
 mod db;
+mod repositories;
+mod services;
+mod mission_coordinator;
+mod mission_commands;
 
 use tauri::Manager;
 use crate::runtime_pgsql::PgRuntimeManager;
@@ -173,6 +177,18 @@ fn main() {
         channels::whatsapp_login_start,
         channels::whatsapp_login_wait,
         channels::whatsapp_logout,
+        // Missions
+        mission_commands::create_mission,
+        mission_commands::list_missions,
+        mission_commands::get_mission_detail,
+        mission_commands::pause_mission,
+        mission_commands::resume_mission,
+        mission_commands::refresh_mission_state,
+        mission_commands::get_mission_projection,
+        mission_commands::admit_contract,
+        mission_commands::record_decision,
+        mission_commands::record_validation,
+        mission_commands::create_artifact,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

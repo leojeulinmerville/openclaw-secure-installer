@@ -47,6 +47,8 @@ export function registerAgentCommands(program: Command, args: { agentChannelOpti
       "--timeout <seconds>",
       "Override agent command timeout (seconds, default 600 or config value)",
     )
+    .option("--mission-id <id>", "Mission id for this run")
+    .option("--contract-id <id>", "Contract id for this run")
     .addHelpText(
       "after",
       () =>

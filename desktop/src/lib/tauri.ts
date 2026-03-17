@@ -25,6 +25,7 @@ import type {
   ChatSession,
   WhatsAppLoginStartResult,
   WhatsAppLoginWaitResult,
+  Contract,
 } from '../types';
 
 // ── Docker ──────────────────────────────────────────────────────────
@@ -156,8 +157,21 @@ export const createRun = (
   model: string,
   title: string,
   userGoal: string,
-  workspacePath: string
-) => invoke<Run>('create_run', { request: { agentId, provider, model, title, userGoal, workspacePath } });
+  workspacePath: string,
+  missionId?: string,
+  contractId?: string
+) => invoke<Run>('create_run', { 
+  request: { 
+    agentId, 
+    provider, 
+    model, 
+    title, 
+    userGoal, 
+    workspacePath,
+    mission_id: missionId,
+    contract_id: contractId
+  } 
+});
 
 export const listModels = () => invoke<string[]>('list_models');
 
@@ -191,6 +205,9 @@ export const getRun = (runId: string) => invoke<Run>('get_run', { runId });
 export const getRunEvents = (runId: string) => invoke<RunEvent[]>('get_run_events', { runId });
 
 export const startRun = (runId: string) => invoke<Run>('start_run', { runId });
+
+export const listMissionContracts = (missionId: string) =>
+  invoke<Contract[]>('list_mission_contracts', { missionId });
 
 export const submitApproval = (runId: string, approvalId: string, decision: 'approved' | 'rejected') => 
     invoke<Run>('submit_approval', { runId, approvalId, decision });

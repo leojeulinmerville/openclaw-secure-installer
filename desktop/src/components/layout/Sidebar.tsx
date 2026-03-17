@@ -11,6 +11,7 @@ import {
   Play,
   PanelTop,
   Link2,
+  ClipboardList,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -26,6 +27,7 @@ const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutDashboard }[] =
   { page: 'overview',  label: 'Overview',   icon: LayoutDashboard },
   { page: 'providers', label: 'Providers',  icon: Cloudy },
   { page: 'agents',    label: 'Agents',     icon: Bot },
+  { page: 'missions',  label: 'Missions',   icon: ClipboardList },
   { page: 'runs',      label: 'Runs',       icon: Play },
   { page: 'chat',      label: 'Chat',       icon: MessageCircle },
   { page: 'policies',  label: 'Policies',   icon: Shield },
@@ -34,6 +36,8 @@ const NAV_ITEMS: { page: Page; label: string; icon: typeof LayoutDashboard }[] =
 ];
 
 export function Sidebar({ page, onNavigate, gatewayOk }: SidebarProps) {
+  const currentPageName = typeof page === 'string' ? page : page.name;
+
   return (
     <aside className="w-56 shrink-0 flex flex-col h-screen border-r border-white/[0.06] bg-black/20 backdrop-blur-xl">
       {/* Logo */}
@@ -51,9 +55,9 @@ export function Sidebar({ page, onNavigate, gatewayOk }: SidebarProps) {
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto custom-scroll">
         {NAV_ITEMS.map(({ page: p, label, icon: Icon }) => (
           <button
-            key={p}
+            key={typeof p === 'string' ? p : p.name}
             onClick={() => onNavigate(p)}
-            className={clsx('nav-item w-full', page === p && 'active')}
+            className={clsx('nav-item w-full', currentPageName === (typeof p === 'string' ? p : p.name) && 'active')}
           >
             <Icon className="w-4 h-4 shrink-0" />
             <span>{label}</span>

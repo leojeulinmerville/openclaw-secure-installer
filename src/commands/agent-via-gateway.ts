@@ -50,6 +50,8 @@ export type AgentCliOpts = {
   runId?: string;
   extraSystemPrompt?: string;
   local?: boolean;
+  missionId?: string;
+  contractId?: string;
 };
 
 function parseTimeoutSeconds(opts: { cfg: ReturnType<typeof loadConfig>; timeout?: string }) {
@@ -141,6 +143,8 @@ export async function agentViaGatewayCommand(opts: AgentCliOpts, runtime: Runtim
           lane: opts.lane,
           extraSystemPrompt: opts.extraSystemPrompt,
           idempotencyKey,
+          missionId: opts.missionId,
+          contractId: opts.contractId,
         },
         expectFinal: true,
         timeoutMs: gatewayTimeoutMs,
@@ -177,6 +181,8 @@ export async function agentCliCommand(opts: AgentCliOpts, runtime: RuntimeEnv, d
     ...opts,
     agentId: opts.agent,
     replyAccountId: opts.replyAccount,
+    missionId: opts.missionId,
+    contractId: opts.contractId,
   };
   if (opts.local === true) {
     return await agentCommand(localOpts, runtime, deps);

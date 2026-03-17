@@ -47,6 +47,7 @@ import {
 import {
   clearAgentRunContext,
   emitAgentEvent,
+  onAgentEvent,
   registerAgentRunContext,
 } from "../infra/agent-events.js";
 import { getRemoteSkillEligibility } from "../infra/skills-remote.js";
@@ -156,6 +157,19 @@ export async function agentCommand(
   } = sessionResolution;
   let sessionEntry = resolvedSessionEntry;
   const runId = opts.runId?.trim() || sessionId;
+  const unsubscribe = onAgentEvent((evt) => {
+    if (evt.runId === runId && evt.stream === "lifecycle") {
+      const { missionId, contractId } = opts;
+      const basePayload = { run_id: runId, mission_id: missionId, contract_id: contractId };
+      if (evt.data?.phase === "start") {
+        process.stdout.write(`[OC_EVENT] run.started ${JSON.stringify(basePayload)}\n`);
+      } else if (evt.data?.phase === "end") {
+        process.stdout.write(`[OC_EVENT] run.completed ${JSON.stringify(basePayload)}\n`);
+      } else if (evt.data?.phase === "error") {
+        process.stdout.write(`[OC_EVENT] run.failed ${JSON.stringify({ ...basePayload, error: evt.data.error })}\n`);
+      }
+    }
+  });
 
   try {
     if (opts.deliver === true) {
@@ -533,6 +547,7 @@ export async function agentCommand(
       payloads,
     });
   } finally {
+    unsubscribe();
     clearAgentRunContext(runId);
   }
 }

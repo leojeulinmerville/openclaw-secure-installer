@@ -10,6 +10,14 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use std::process::Stdio;
 
+use crate::db::DbState;
+use crate::repositories::run_linkages_repository::RunLinkagesRepository;
+use crate::repositories::artifacts_repository::ArtifactsRepository;
+use crate::repositories::decision_records_repository::DecisionRecordsRepository;
+use crate::repositories::responsibility_ledger_repository::ResponsibilityLedgerRepository;
+use crate::repositories::resume_snapshots_repository::ResumeSnapshotsRepository;
+use crate::services::projection_service::ProjectionService;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub enum RunStatus {
@@ -60,6 +68,8 @@ pub struct CreateRunRequest {
     pub title: String,
     pub user_goal: String,
     pub workspace_path: String,
+    pub mission_id: Option<String>,
+    pub contract_id: Option<String>,
 }
 
 // ── Commands ────────────────────────────────────────────────────────
@@ -98,6 +108,15 @@ pub async fn create_run(app: AppHandle, request: CreateRunRequest) -> Result<Run
     // Create empty events.jsonl
     let events_path = run_dir.join("events.jsonl");
     fs::write(&events_path, "").map_err(|e| e.to_string())?;
+
+    // Persist linkage if mission/contract IDs are provided
+    let state = app.try_state::<DbState>();
+    if let (Some(db), Some(m_id), Some(c_id)) = (state, request.mission_id, request.contract_id) {
+        let repo = RunLinkagesRepository::new(db.pool.clone());
+        let mission_uuid = Uuid::parse_str(&m_id).map_err(|e| e.to_string())?;
+        let contract_uuid = Uuid::parse_str(&c_id).map_err(|e| e.to_string())?;
+        repo.create(id.clone(), mission_uuid, contract_uuid).await.map_err(|e| e.to_string())?;
+    }
 
     // Emit event?
     // app.emit("run-created", &run).ok();
@@ -249,6 +268,24 @@ async fn execute_command_streaming(app: &AppHandle, run_id: &str, mut cmd: Comma
     let stdout_handle = tokio::spawn(async move {
         let mut full = String::new();
         while let Ok(Some(line)) = stdout_reader.next_line().await {
+            if line.starts_with("[OC_EVENT] ") {
+                let rest = &line["[OC_EVENT] ".len()..];
+                if let Some((event_name, payload_str)) = rest.split_once(' ') {
+                    let _payload: serde_json::Value = serde_json::from_str(payload_str).unwrap_or(serde_json::Value::Null);
+                    match event_name {
+                        "run.started" => {
+                            let _ = reconcile_run_status(&app_c, &rid_c, RunStatus::Running).await;
+                        }
+                        "run.completed" => {
+                            let _ = reconcile_run_status(&app_c, &rid_c, RunStatus::Done).await;
+                        }
+                        "run.failed" => {
+                            let _ = reconcile_run_status(&app_c, &rid_c, RunStatus::Failed).await;
+                        }
+                        _ => {}
+                    }
+                }
+            }
             full.push_str(&line);
             full.push('\n');
             let _ = _append_event(&app_c, &rid_c, "run.log", serde_json::json!({ "stream": "stdout", "content": line }));
@@ -275,44 +312,78 @@ async fn execute_command_streaming(app: &AppHandle, run_id: &str, mut cmd: Comma
     }
 }
 
-fn discover_artifacts(app: &AppHandle, run_id: &str, workspace_path: &str) -> Result<(), String> {
+async fn discover_artifacts(app: &AppHandle, run_id: &str, workspace_path: &str, mission_id: Uuid, contract_id: Uuid) -> Result<(), String> {
     let workspace = Path::new(workspace_path);
     if !workspace.exists() { return Ok(()); }
 
-    fn visit_dirs(app: &AppHandle, run_id: &str, dir: &Path, root: &Path) -> Result<(), String> {
-        if dir.is_dir() {
-            let entries = fs::read_dir(dir).map_err(|e| e.to_string())?;
-            for entry in entries {
-                let entry = entry.map_err(|e| e.to_string())?;
-                let path = entry.path();
-                
-                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name == "node_modules" || name == ".git" || name == ".openclaw" || name == ".pi" || name == "dist" {
-                        continue;
-                    }
-                }
+    let state = app.try_state::<DbState>();
+    let pool = if let Some(db) = state {
+        db.pool.clone()
+    } else {
+        return Err("Database state not found".to_string());
+    };
+    let repo = ArtifactsRepository::new(pool);
 
-                if path.is_dir() {
-                    visit_dirs(app, run_id, &path, root)?;
-                } else {
-                    let rel_path = path.strip_prefix(root).map_err(|e| e.to_string())?;
-                    let name = rel_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
-                    
-                    let _ = _append_event(app, run_id, "artifact.created", serde_json::json!({
-                        "name": name,
-                        "path": rel_path.to_string_lossy(),
-                        "type": "file"
-                    }));
+    let mut stack = vec![workspace.to_path_buf()];
+
+    while let Some(current_dir) = stack.pop() {
+        if !current_dir.is_dir() { continue; }
+        let entries = fs::read_dir(&current_dir).map_err(|e| e.to_string())?;
+        for entry in entries {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                if name == "node_modules" || name == ".git" || name == ".openclaw" || name == ".pi" || name == "dist" {
+                    continue;
                 }
             }
-        }
-        Ok(())
-    }
 
-    visit_dirs(app, run_id, workspace, workspace)
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                let rel_path = path.strip_prefix(workspace).map_err(|e| e.to_string())?;
+                let name = rel_path.file_name().and_then(|n| n.to_str()).unwrap_or("unknown");
+                let storage_path = rel_path.to_string_lossy().to_string();
+                
+                let _ = _append_event(app, run_id, "artifact.created", serde_json::json!({
+                    "name": name,
+                    "path": storage_path,
+                    "type": "file"
+                }));
+
+                let _ = repo.upsert_artifact(
+                    mission_id,
+                    Some(contract_id),
+                    "file".to_string(),
+                    name.to_string(),
+                    Some(storage_path),
+                    None
+                ).await;
+            }
+        }
+    }
+    Ok(())
 }
 
 async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model: &str, prompt: &str, workspace: &str) {
+    // 1. Fetch Linkage for Mission/Contract IDs
+    let state = app.try_state::<DbState>();
+    let mut mission_id_uuid = None;
+    let mut contract_id_uuid = None;
+    let mut mission_id_str = None;
+    let mut contract_id_str = None;
+
+    if let Some(db) = state {
+        let repo = RunLinkagesRepository::new(db.pool.clone());
+        if let Ok(linkage) = repo.get_by_run_id(run_id).await {
+            mission_id_uuid = Some(linkage.mission_id);
+            contract_id_uuid = Some(linkage.contract_id);
+            mission_id_str = Some(linkage.mission_id.to_string());
+            contract_id_str = Some(linkage.contract_id.to_string());
+        }
+    }
+
     // Determine the openclaw bin path
     let cwd = std::env::current_dir().unwrap_or_default();
     let dev_script1 = cwd.join("../../scripts/run-node.mjs");
@@ -373,13 +444,22 @@ async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model
         .arg("--message").arg(prompt)
         .arg("--local");
 
+    if let Some(m_id) = mission_id_str {
+        run_cmd.arg("--mission-id").arg(m_id);
+    }
+    if let Some(c_id) = contract_id_str {
+        run_cmd.arg("--contract-id").arg(c_id);
+    }
+
     match execute_command_streaming(app, run_id, run_cmd).await {
         Ok(stdout) => {
             let _ = _append_event(app, run_id, "llm.completed", serde_json::json!({ "output": stdout }));
             let _ = _append_event(app, run_id, "agent.message", serde_json::json!({ "role": "assistant", "content": stdout }));
             
             // Artifact discovery
-            let _ = discover_artifacts(app, run_id, workspace);
+            if let (Some(m_id), Some(c_id)) = (mission_id_uuid, contract_id_uuid) {
+                let _ = discover_artifacts(app, run_id, workspace, m_id, c_id).await;
+            }
             
             let _ = update_run_status(app, run_id, RunStatus::Done, None).await;
         }
@@ -393,7 +473,7 @@ async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model
 
 async fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, error: Option<String>) -> Result<(), String> {
      if let Ok(mut run) = get_run(app.clone(), run_id.to_string()).await {
-         run.status = status;
+         run.status = status.clone();
          run.updated_at = Utc::now().to_rfc3339();
          run.error = error;
          _update_run_meta(app, &run)?;
@@ -403,10 +483,49 @@ async fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, err
              "status": run.status,
              "error": run.error
          }));
+
+         let _ = reconcile_run_status(app, run_id, status).await;
+
          Ok(())
      } else {
          Ok(()) // ignore
      }
+}
+
+async fn reconcile_run_status(app: &AppHandle, run_id: &str, status: RunStatus) -> Result<(), String> {
+    let state = app.try_state::<DbState>();
+    if let Some(db) = state {
+        let repo = RunLinkagesRepository::new(db.pool.clone());
+        let status_str = match status {
+            RunStatus::Queued => "queued",
+            RunStatus::Running => "running",
+            RunStatus::Blocked => "blocked",
+            RunStatus::Done => "done",
+            RunStatus::Failed => "failed",
+            RunStatus::Cancelled => "cancelled",
+        }.to_string();
+
+        if let Ok(linkage) = repo.get_by_run_id(run_id).await {
+            let _ = repo.update_status(run_id, status_str.clone()).await;
+            
+            // Refresh mission projection
+            let projection_service = ProjectionService::new(db.pool.clone());
+            let _ = projection_service.refresh_projection(linkage.mission_id).await;
+
+            // Create ResumeSnapshot when run ends
+            if matches!(status, RunStatus::Done | RunStatus::Failed | RunStatus::Blocked) {
+                let snapshots_repo = ResumeSnapshotsRepository::new(db.pool.clone());
+                let _ = snapshots_repo.create(
+                    linkage.mission_id,
+                    format!("Run {} ended with status {}", run_id, status_str),
+                    Some("auto".to_string()),
+                    Some("Review run artifacts and determine next step".to_string()),
+                    Some(serde_json::json!({ "run_id": run_id, "status": status_str }))
+                ).await;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn _update_run_meta(app: &AppHandle, run: &Run) -> Result<(), String> {
@@ -427,9 +546,38 @@ pub async fn submit_approval(app: AppHandle, run_id: String, approval_id: String
         "decision": decision
     }))?;
 
+    // Record decision and responsibility ledger entry
+    let state = app.try_state::<DbState>();
+    if let Some(db) = state {
+        let linkage_repo = RunLinkagesRepository::new(db.pool.clone());
+        if let Ok(linkage) = linkage_repo.get_by_run_id(&run_id).await {
+            let mission_id = linkage.mission_id;
+            
+            let decision_repo = DecisionRecordsRepository::new(db.pool.clone());
+            if let Ok(record) = decision_repo.create(
+                mission_id,
+                "approval_resolved".to_string(),
+                format!("Approval resolved for run {} with decision {}", run_id, decision),
+                Some(decision.clone()),
+                Some("user".to_string()),
+                None
+            ).await {
+                let ledger_repo = ResponsibilityLedgerRepository::new(db.pool.clone());
+                let _ = ledger_repo.create_entry(
+                    mission_id,
+                    "decision".to_string(),
+                    Some(record.decision_id),
+                    "user".to_string(),
+                    format!("User {} approval for run {}", decision, run_id)
+                ).await;
+            }
+        }
+    }
+
     if decision == "approved" {
         run.status = RunStatus::Running;
         _update_run_meta(&app, &run)?;
+        let _ = reconcile_run_status(&app, &run.id, RunStatus::Running).await;
 
         let app_handle = app.clone();
         let r_id = run.id.clone();
@@ -441,6 +589,7 @@ pub async fn submit_approval(app: AppHandle, run_id: String, approval_id: String
          run.status = RunStatus::Failed; // Cancelled
          run.error = Some("Rejected by user".to_string());
          _update_run_meta(&app, &run)?;
+         let _ = reconcile_run_status(&app, &run.id, RunStatus::Failed).await;
          let _ = _append_event(&app, &run.id, "run.cancelled", serde_json::json!({}));
     }
 

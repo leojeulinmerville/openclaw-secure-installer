@@ -343,6 +343,8 @@ export interface Run {
   error: string | null;
   workspace_path: string;
   repo_mode: 'none' | 'git';
+  mission_id?: string;
+  contract_id?: string;
 }
 
 export type EventType =
@@ -384,7 +386,7 @@ export interface Approval {
   kind: ApprovalKind;
   summary: string;
   risk_level: 'low' | 'medium' | 'high' | 'critical';
-  payload: unknown; // e.g., the patch content
+  payload: unknown; // e.g., the join content
   created_at: string;
   resolved_at: string | null;
   decision: 'approved' | 'rejected' | null;
@@ -397,6 +399,63 @@ export interface Artifact {
   name: string;
   path: string; // Relative to run artifacts dir
   created_at: string;
+}
+
+// ── Missions ────────────────────────────────────────────────────────
+
+export interface Contract {
+  contract_id: string;
+  mission_id: string;
+  contract_type: string;
+  title: string;
+  status: string;
+  health_state: string;
+  governance_state: string;
+  assigned_role: string | null;
+  spec_raw: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Mission {
+  mission_id: string;
+  title: string;
+  status: string;
+  mission_mode: string;
+  current_phase?: string | null;
+  health_state: string;
+  governance_state: string;
+  resume_readiness: boolean;
+  created_at: string;
+  updated_at: string;
+  last_resume_at?: string | null;
+  summary_current?: string | null;
+  risk_level_initial?: string | null;
+  risk_level_current?: string | null;
+}
+
+export interface MissionStateProjection {
+  projection_id: string;
+  mission_id: string;
+  phase: string | null;
+  status: string | null;
+  health: string | null;
+  governance: string | null;
+  focus: string | null;
+  blocker_risk: string | null;
+  resume_readiness: boolean;
+  updated_at: string;
+  title: string | null;
+  mode: string | null;
+  health_state: string | null;
+  governance_state: string | null;
+  reference_path: string | null;
+  top_blocker: string | null;
+  top_risk: string | null;
+  active_contract_count: number;
+  last_decision_summary: string | null;
+  last_validation_summary: string | null;
+  needs_human_attention: boolean;
 }
 
 // ── Navigation (Updated) ────────────────────────────────────────────
@@ -415,6 +474,9 @@ export type Page =
   | 'runs'
   | 'run-detail'
   | 'create-run'
+  | { name: 'create-run'; mission_id?: string; contract_id?: string }
+  | 'missions'
+  | 'mission-detail'
   | 'setup'
   | 'connect-ollama';
 
