@@ -115,6 +115,7 @@ pub async fn create_run(app: AppHandle, request: CreateRunRequest) -> Result<Run
         let repo = RunLinkagesRepository::new(db.pool.clone());
         let mission_uuid = Uuid::parse_str(&m_id).map_err(|e| e.to_string())?;
         let contract_uuid = Uuid::parse_str(&c_id).map_err(|e| e.to_string())?;
+        // REPO API: run_id, mission_id, contract_id
         repo.create(id.clone(), mission_uuid, contract_uuid).await.map_err(|e| e.to_string())?;
     }
 
@@ -542,7 +543,7 @@ pub async fn reconcile_run_status_core(pool: &sqlx::PgPool, run_id: &str, status
                     format!("Run {} entered blocked state. Intervention may be required.", run_id),
                     None,
                     Some("system".to_string()),
-                    Some(format!("Run status: {}", status_str)),
+                    None, // rationale
                 ).await;
             }
             _ => {}
@@ -553,9 +554,9 @@ pub async fn reconcile_run_status_core(pool: &sqlx::PgPool, run_id: &str, status
             let validation_repo = crate::repositories::validation_records_repository::ValidationRecordsRepository::new(pool.clone());
             
             // Check for idempotence: Do we already have a completion record for this run?
-            let existing_validations = validation_repo.list_for_mission(linkage.mission_id).await.unwrap_or_default();
-            let already_handled = existing_validations.iter().any(|v| {
-                v.scope == "run_completion" && v.metadata.as_ref().map_or(false, |m| {
+            let existing_validations = validation_repo.list_latest_for_mission(linkage.mission_id, 1000).await.unwrap_or_default();
+            let already_handled = existing_validations.iter().any(|v: &crate::repositories::validation_records_repository::ValidationRecord| {
+                v.validation_scope == "run_completion" && v.evidence_links.as_ref().map_or(false, |m: &serde_json::Value| {
                     m.get("run_id").and_then(|id| id.as_str()) == Some(run_id)
                 })
             });
@@ -642,7 +643,7 @@ pub async fn submit_approval(app: AppHandle, run_id: String, approval_id: String
                 format!("Approval resolved for run {} with decision {}", run_id, decision),
                 Some(decision.clone()),
                 Some("user".to_string()),
-                None
+                None // rationale
             ).await {
                 let ledger_repo = ResponsibilityLedgerRepository::new(db.pool.clone());
                 let _ = ledger_repo.create_entry(

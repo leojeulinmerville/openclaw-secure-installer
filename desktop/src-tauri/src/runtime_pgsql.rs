@@ -4,16 +4,16 @@ use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
-use tauri::AppHandle;
+use tauri::{AppHandle, Runtime};
 use tauri::Manager;
 use zip::read::ZipArchive;
 
-pub struct PgRuntimeManager {
-    app_handle: AppHandle,
+pub struct PgRuntimeManager<R: Runtime> {
+    app_handle: AppHandle<R>,
 }
 
-impl PgRuntimeManager {
-    pub fn new(app_handle: AppHandle) -> Self {
+impl<R: Runtime> PgRuntimeManager<R> {
+    pub fn new(app_handle: AppHandle<R>) -> Self {
         Self { app_handle }
     }
 
@@ -248,42 +248,33 @@ impl PgRuntimeManager {
     }
 
     /// Wait for PostgreSQL to become ready using pg_isready.
-    /// Polls every 500ms for up to `timeout_secs` seconds.
     pub fn wait_for_ready(&self, port: u16, timeout_secs: u64) -> Result<(), String> {
         let pg_root = self.get_pg_root();
         let pg_isready_exe = pg_root.join("bin").join("pg_isready.exe");
         let start = Instant::now();
         let timeout = Duration::from_secs(timeout_secs);
 
-        println!("Waiting for PostgreSQL readiness on port {}...", port);
-        loop {
-            let status = Command::new(&pg_isready_exe)
+        while start.elapsed() < timeout {
+            let output = Command::new(&pg_isready_exe)
                 .arg("-h")
                 .arg("127.0.0.1")
                 .arg("-p")
                 .arg(port.to_string())
                 .arg("-U")
                 .arg("openclaw")
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status();
+                .output();
 
-            match status {
-                Ok(s) if s.success() => {
+            match output {
+                Ok(out) if out.status.success() => {
                     println!("PostgreSQL is ready on port {}.", port);
                     return Ok(());
                 }
                 _ => {
-                    if start.elapsed() > timeout {
-                        return Err(format!(
-                            "PostgreSQL did not become ready within {} seconds on port {}",
-                            timeout_secs, port
-                        ));
-                    }
                     thread::sleep(Duration::from_millis(500));
                 }
             }
         }
+        Err(format!("PostgreSQL failed to become ready within {} seconds", timeout_secs))
     }
 
     pub fn stop_server(&self) -> Result<(), String> {
@@ -302,9 +293,8 @@ impl PgRuntimeManager {
             .map_err(|e| format!("Failed to run pg_ctl stop: {}", e))?;
 
         if !status.success() {
-            return Err(format!("pg_ctl stop failed with exit code: {:?}", status.code()));
+            println!("Warning: pg_ctl stop failed with exit code: {:?}", status.code());
         }
-        println!("PostgreSQL stopped.");
         Ok(())
     }
 }
