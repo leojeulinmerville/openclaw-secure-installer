@@ -9,7 +9,7 @@ const PORT = parseInt(
 );
 const SAFE_MODE = process.env.OPENCLAW_SAFE_MODE === "1";
 const LOG_LEVEL = process.env.LOG_LEVEL || "info";
-const VERSION = "0.1.0-mvp";
+const VERSION = "0.1.0-mvp-fixed-v2";
 
 const startTime = Date.now();
 
@@ -69,8 +69,10 @@ const server = createServer(async (req, res) => {
 
   log("debug", `${method} ${url.pathname} (normalized: ${path})`);
 
-  // ── Health ──────────────────────────────────────────────────────
+  // ── Route Chain ──────────────────────────────────────────────────
+  
   if (path === "/health" || path === "/api/v1/health") {
+    // ── Health ──
     const uptimeMs = Date.now() - startTime;
     json(res, 200, {
       status: "healthy",
@@ -79,22 +81,18 @@ const server = createServer(async (req, res) => {
       version: VERSION,
     });
     log("debug", `GET ${path} → 200 (uptime: ${uptimeMs}ms)`);
-    return;
-  }
 
-  // ── Version ─────────────────────────────────────────────────────
-  if (path === "/api/v1/version" && method === "GET") {
+  } else if (path === "/api/v1/version" && method === "GET") {
+    // ── Version ──
     json(res, 200, {
       version: VERSION,
       node_version: process.version,
       platform: process.platform,
       arch: process.arch,
     });
-    return;
-  }
 
-  // ── Capabilities ────────────────────────────────────────────────
-  if (path === "/api/v1/capabilities" && method === "GET") {
+  } else if (path === "/api/v1/capabilities" && method === "GET") {
+    // ── Capabilities ──
     json(res, 200, {
       safe_mode: SAFE_MODE,
       features: [
@@ -103,17 +101,14 @@ const server = createServer(async (req, res) => {
         "event_stream",
         "policy_read",
       ],
+      control_ui: { base_path: "/ui", auth_required: false, auth_mode: "none", insecure_fallback: true },
     });
-    return;
-  }
 
-  // ── Agents ──────────────────────────────────────────────────────
-  if (path === "/api/v1/agents") {
+  } else if (path === "/api/v1/agents") {
+    // ── Agents ──
     if (method === "GET") {
       json(res, 200, { agents: registeredAgents });
-      return;
-    }
-    if (method === "POST") {
+    } else if (method === "POST") {
       try {
         const body = await readBody(req);
         const agent = {
@@ -123,7 +118,6 @@ const server = createServer(async (req, res) => {
           status: body.status || "registered",
           registered_at: new Date().toISOString(),
         };
-        // Upsert by name
         const idx = registeredAgents.findIndex((a) => a.name === agent.name);
         if (idx >= 0) registeredAgents[idx] = agent;
         else registeredAgents.push(agent);
@@ -133,9 +127,7 @@ const server = createServer(async (req, res) => {
       } catch (e) {
         json(res, 400, { error: "invalid_body", message: e.message });
       }
-      return;
-    }
-    if (method === "DELETE") {
+    } else if (method === "DELETE") {
       try {
         const body = await readBody(req);
         const name = body.name;
@@ -145,52 +137,46 @@ const server = createServer(async (req, res) => {
       } catch (e) {
         json(res, 400, { error: "invalid_body", message: e.message });
       }
-      return;
+    } else {
+      json(res, 405, { error: "method_not_allowed" });
     }
-  }
 
-  // ── Auth Bootstrap (Desktop Integration) ────────────────────────
-  if (path === "/api/v1/local-auth/bootstrap" || path === "/api/v1/auth/bootstrap") {
+  } else if (path === "/api/v1/local-auth/bootstrap" || path === "/api/v1/auth/bootstrap") {
+    // ── Auth Bootstrap ──
+    log("info", `!!! BOOTSTRAP HIT !!! path='${path}'`);
     const token = url.searchParams.get("token");
     const expectedToken = process.env.OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN;
     
     if (expectedToken && token !== expectedToken) {
       json(res, 401, { error: "unauthorized" });
       log("warn", `Auth bootstrap failed: invalid token`);
-      return;
+    } else {
+      const nextPath = url.searchParams.get("next") || "/";
+      const redirectUrl = nextPath.startsWith("/") ? nextPath : "/" + nextPath;
+      
+      res.writeHead(302, {
+        "Set-Cookie": "openclaw_local_session=mvp-mock-session; Path=/; HttpOnly; SameSite=Strict",
+        "Cache-Control": "no-store",
+        "Location": redirectUrl
+      });
+      res.end();
+      log("info", `Auth bootstrap success, redirecting to ${redirectUrl}`);
     }
-    
-    const nextPath = url.searchParams.get("next") || "/";
-    const redirectUrl = nextPath.startsWith("/") ? nextPath : "/" + nextPath;
-    
-    res.writeHead(302, {
-      "Set-Cookie": "openclaw_local_session=mvp-mock-session; Path=/; HttpOnly; SameSite=Strict",
-      "Cache-Control": "no-store",
-      "Location": redirectUrl
-    });
-    res.end();
-    log("info", `Auth bootstrap success, redirecting to ${redirectUrl}`);
-    return;
-  }
 
-  // ── WhatsApp Login Stubs ────────────────────────────────────────
-  if (path === "/api/v1/web.login.start") {
+  } else if (path === "/api/v1/web.login.start") {
+    // ── WhatsApp Login Start ──
     json(res, 200, {
       qrDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==",
       message: "MVP Mode: This is a placeholder QR code. Use the full orchestrator for real WhatsApp pairing."
     });
-    return;
-  }
 
-  if (path === "/api/v1/web.login.wait") {
-    // Wait a bit then return success in MVP mode
+  } else if (path === "/api/v1/web.login.wait") {
+    // ── WhatsApp Login Wait ──
     await new Promise(r => setTimeout(r, 2000));
     json(res, 200, { connected: true, message: "MVP Mode: Mock connection successful." });
-    return;
-  }
 
-  // ── Control UI Placeholder ──────────────────────────────────────
-  if (path.startsWith("/ui") || path.startsWith("/console") || path.startsWith("/openclaw")) {
+  } else if (path === "/ui" || path.startsWith("/ui/") || path === "/console" || path.startsWith("/console/")) {
+    // ── Control UI Placeholder ──
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(`
       <!DOCTYPE html>
@@ -216,12 +202,9 @@ const server = createServer(async (req, res) => {
       </html>
     `);
     log("info", `Served UI placeholder for ${path}`);
-    return;
-  }
 
-
-  // ── Events ──────────────────────────────────────────────────────
-  if (path === "/api/v1/events") {
+  } else if (path === "/api/v1/events") {
+    // ── Events ──
     if (method === "GET") {
       const limit = parseInt(url.searchParams.get("limit") || "50", 10);
       const since = url.searchParams.get("since");
@@ -233,9 +216,7 @@ const server = createServer(async (req, res) => {
         );
       }
       json(res, 200, { events: filtered.slice(-limit) });
-      return;
-    }
-    if (method === "POST") {
+    } else if (method === "POST") {
       try {
         const body = await readBody(req);
         const event = pushEvent(body.type || "custom", body.data || {});
@@ -244,23 +225,21 @@ const server = createServer(async (req, res) => {
       } catch (e) {
         json(res, 400, { error: "invalid_body", message: e.message });
       }
-      return;
+    } else {
+      json(res, 405, { error: "method_not_allowed" });
     }
-  }
 
-  // ── Policies (read-only, desktop is source of truth) ────────────
-  if (path === "/api/v1/policies" && method === "GET") {
+  } else if (path === "/api/v1/policies" && method === "GET") {
+    // ── Policies ──
     json(res, 200, {
       safe_mode: SAFE_MODE,
       egress_allowlist: ["api.openai.com", "localhost"],
       cost_caps: { global_daily: null, per_agent_daily: null },
       note: "Policies are enforced by the desktop control plane.",
     });
-    return;
-  }
 
-  // ── Connections ─────────────────────────────────────────────────
-  if (path.startsWith("/api/v1/connections")) {
+  } else if (path.startsWith("/api/v1/connections")) {
+    // ── Connections ──
     if (path === "/api/v1/connections/schema" && method === "GET") {
       json(res, 200, {
         version: "v1",
@@ -269,9 +248,7 @@ const server = createServer(async (req, res) => {
         channels: [],
         providers: []
       });
-      return;
-    }
-    if (path === "/api/v1/connections/status" && method === "GET") {
+    } else if (path === "/api/v1/connections/status" && method === "GET") {
       json(res, 200, {
         version: "v1",
         generated_at: new Date().toISOString(),
@@ -279,17 +256,14 @@ const server = createServer(async (req, res) => {
         channels: [],
         providers: []
       });
-      return;
-    }
-    // Stub for configure / test
-    if (method === "POST") {
+    } else if (method === "POST") {
       json(res, 200, { ok: true, message: "Stub executed successfully in gateway" });
-      return;
+    } else {
+      json(res, 405, { error: "method_not_allowed" });
     }
-  }
 
-  // ── Root info ───────────────────────────────────────────────────
-  if (path === "/" || path === "") {
+  } else if (path === "/" || path === "") {
+    // ── Root ──
     json(res, 200, {
       name: "openclaw-gateway",
       version: VERSION,
@@ -308,16 +282,16 @@ const server = createServer(async (req, res) => {
       ],
     });
     log("info", `GET / → 200`);
-    return;
-  }
 
-  // ── 404 ─────────────────────────────────────────────────────────
-  json(res, 404, { error: "not_found", path: url.pathname });
-  log("info", `${method} ${url.pathname} → 404`);
+  } else {
+    // ── 404 Handler ──
+    log("error", `!!! 404 DEAD END !!! method=${method} path='${path}' url='${url.pathname}' raw='${req.url}'`);
+    json(res, 404, { error: "not_found", path, method, full_url: url.pathname });
+  }
 });
 
 server.listen(PORT, "0.0.0.0", () => {
-  log("info", `OpenClaw Gateway listening on 0.0.0.0:${PORT}`);
+  log("info", `OpenClaw Gateway MVP listening on 0.0.0.0:${PORT}`);
   log("info", `Safe mode: ${SAFE_MODE ? "ENABLED" : "disabled"}`);
   log("info", `Log level: ${LOG_LEVEL}`);
   log("info", `Health: http://localhost:${PORT}/health`);

@@ -363,6 +363,9 @@ fn build_console_bootstrap_url(port: u16, base_path: &str, bootstrap_token: &str
     } else {
         format!("{}/", normalized)
     };
+    // The bootstrap endpoint is at a fixed location in the gateway API.
+    // We include the normalized base_path in the 'next' parameter so that
+    // the gateway knows where to redirect after successful session establishment.
     let mut url =
         reqwest::Url::parse(&format!("http://127.0.0.1:{}{}", port, LOCAL_AUTH_BOOTSTRAP_PATH))
             .unwrap_or_else(|_| {
@@ -726,13 +729,20 @@ fn probe_health(port: u16) -> HealthCheckResult {
         .and_then(|code| code.parse::<u16>().ok());
 
     // Extract body (after blank line)
-    let body = response
-        .split("\r\n\r\n")
-        .nth(1)
-        .unwrap_or("")
-        .to_string();
+    let body = response.split("\r\n\r\n").nth(1).unwrap_or("").to_string();
 
-    let healthy = status_code == Some(200) && body.contains("ok");
+    let healthy = status_code == Some(200) && {
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&body) {
+            // Robust JSON status check
+            val.get("status")
+                .and_then(|s| s.as_str())
+                .map(|s| s == "healthy" || s == "ok")
+                .unwrap_or(false)
+        } else {
+            // Fallback for non-JSON or simple text responses
+            body.contains("healthy") || body.contains("ok")
+        }
+    };
 
     HealthCheckResult {
         healthy,
@@ -889,6 +899,7 @@ pub fn generate_compose_content(image: &str, http_port: u16) -> String {
       OPENCLAW_SAFE_MODE: "1"
       LOG_LEVEL: info
       OPENCLAW_CONTAINER_PORT: "8080"
+      OPENCLAW_GATEWAY_PORT: "8080"
       OPENCLAW_GATEWAY_TOKEN: "${{OPENCLAW_GATEWAY_TOKEN:-}}"
       OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: "${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}"
       OPENCLAW_ALLOW_INTERNET: "${{OPENCLAW_ALLOW_INTERNET:-0}}"
@@ -910,6 +921,7 @@ pub fn generate_compose_content(image: &str, http_port: u16) -> String {
       OPENCLAW_SAFE_MODE: "1"
       LOG_LEVEL: info
       OPENCLAW_CONTAINER_PORT: "8080"
+      OPENCLAW_GATEWAY_PORT: "8080"
       OPENCLAW_GATEWAY_TOKEN: "${{OPENCLAW_GATEWAY_TOKEN:-}}"
       OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN: "${{OPENCLAW_DESKTOP_BOOTSTRAP_TOKEN:-}}"
       OPENCLAW_ALLOW_INTERNET: "${{OPENCLAW_ALLOW_INTERNET:-0}}"

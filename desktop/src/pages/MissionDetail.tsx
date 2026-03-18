@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { Mission, MissionStateProjection } from '../types';
+import { listen } from '@tauri-apps/api/event';
+import type { Mission, MissionStateProjection, Contract, MissionArtifact, RunLinkage } from '../types';
+import { listMissionContracts, listMissionArtifacts, listMissionRunLinkages } from '../lib/tauri';
 import { 
   Shield, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, 
   ChevronLeft, Calendar, FileText, Pause, Play, RefreshCw 
@@ -8,12 +10,15 @@ import {
 
 interface MissionDetailProps {
   missionId: string;
-  onNavigate: (page: 'missions') => void;
+  onNavigate: (page: any) => void;
 }
 
 export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
   const [mission, setMission] = useState<Mission | null>(null);
   const [projection, setProjection] = useState<MissionStateProjection | null>(null);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [artifacts, setArtifacts] = useState<MissionArtifact[]>([]);
+  const [runs, setRuns] = useState<RunLinkage[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,6 +26,19 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
   useEffect(() => {
     loadMission();
     loadProjection();
+    loadLinkedData();
+
+    const unlisten = listen('mission-projection-updated', (event) => {
+      if (event.payload === missionId) {
+        loadMission();
+        loadProjection();
+        loadLinkedData();
+      }
+    });
+
+    return () => {
+      unlisten.then((f) => f());
+    };
   }, [missionId]);
 
   const loadMission = async () => {
@@ -47,11 +65,26 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
     }
   };
 
+  const loadLinkedData = async () => {
+    try {
+      const [contractsData, artifactsData, runsData] = await Promise.all([
+        listMissionContracts(missionId),
+        listMissionArtifacts(missionId),
+        listMissionRunLinkages(missionId)
+      ]);
+      setContracts(contractsData);
+      setArtifacts(artifactsData);
+      setRuns(runsData);
+    } catch (e) {
+      console.error('Failed to load linked data', e);
+    }
+  };
+
   const handlePause = async () => {
     setActionLoading(true);
     try {
       await invoke('pause_mission', { missionId });
-      await Promise.all([loadMission(), loadProjection()]);
+      await Promise.all([loadMission(), loadProjection(), loadLinkedData()]);
     } catch (e) {
       console.error('Failed to pause mission', e);
       alert('Failed to pause mission: ' + e);
@@ -64,7 +97,7 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
     setActionLoading(true);
     try {
       await invoke('resume_mission', { missionId });
-      await Promise.all([loadMission(), loadProjection()]);
+      await Promise.all([loadMission(), loadProjection(), loadLinkedData()]);
     } catch (e) {
       console.error('Failed to resume mission', e);
       alert('Failed to resume mission: ' + e);
@@ -77,7 +110,7 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
     setActionLoading(true);
     try {
       await invoke('refresh_mission_state', { missionId });
-      await Promise.all([loadMission(), loadProjection()]);
+      await Promise.all([loadMission(), loadProjection(), loadLinkedData()]);
     } catch (e) {
       console.error('Failed to refresh mission state', e);
       alert('Failed to refresh mission: ' + e);
@@ -305,6 +338,116 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
               <span className="text-sm text-white/40">Last Updated</span>
               <span className="text-sm text-white font-mono">{new Date(mission.updated_at).toLocaleString()}</span>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bridge Data Panels ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        
+        {/* Contracts Panel */}
+        <div className="glass-panel p-6 space-y-4 flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-emerald-400" />
+              <h3 className="font-bold text-white">Active Contracts</h3>
+            </div>
+          </div>
+          <div className="flex-1 space-y-3 custom-scroll overflow-y-auto max-h-[300px] pr-2">
+            {contracts.length === 0 ? (
+              <p className="text-sm text-white/40 italic">No contracts found.</p>
+            ) : (
+              contracts.map(c => (
+                <div key={c.contract_id} className="p-3 bg-white/5 rounded-lg border border-white/5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-white text-sm">{c.title || c.contract_type}</span>
+                    <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm 
+                      ${c.status === 'admitted' ? 'bg-amber-500/20 text-amber-400' : 
+                        c.status === 'active' ? 'bg-cyan-500/20 text-cyan-400' : 
+                        c.status === 'fulfilled' ? 'bg-emerald-500/20 text-emerald-400' : 
+                        'bg-red-500/20 text-red-400'}`}>
+                      {c.status}
+                    </span>
+                  </div>
+                  <div className="flex justify-start">
+                    <button
+                      onClick={() => onNavigate({ name: 'create-run', mission_id: missionId, contract_id: c.contract_id })}
+                      className="text-[10px] bg-cyan-500 hover:bg-cyan-400 text-black font-bold uppercase tracking-wider px-2 py-1 rounded transition-colors"
+                    >
+                      Launch Linked Run
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Linked Runs Panel */}
+        <div className="glass-panel p-6 space-y-4 flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <RefreshCw className="w-4 h-4 text-amber-400" />
+              <h3 className="font-bold text-white">Linked Runs</h3>
+            </div>
+          </div>
+          <div className="flex-1 space-y-3 custom-scroll overflow-y-auto max-h-[300px] pr-2">
+            {runs.length === 0 ? (
+              <p className="text-sm text-white/40 italic">No runs linked yet.</p>
+            ) : (
+              runs.map(r => (
+                <div key={r.run_id} className="p-3 bg-white/5 rounded-lg border border-white/5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-xs text-white/70 truncate mr-2" title={r.run_id}>
+                      {r.run_id.substring(0, 8)}...
+                    </span>
+                    <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-sm 
+                      ${r.status === 'running' ? 'bg-cyan-500/20 text-cyan-400' : 
+                        r.status === 'done' ? 'bg-emerald-500/20 text-emerald-400' : 
+                        r.status === 'failed' ? 'bg-red-500/20 text-red-400' : 
+                        'bg-white/10 text-white/60'}`}>
+                      {r.status}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-white/40">
+                    Linked: {new Date(r.created_at).toLocaleString()}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Artifacts Panel */}
+        <div className="glass-panel p-6 space-y-4 flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-purple-400" />
+              <h3 className="font-bold text-white">Discovered Artifacts</h3>
+            </div>
+          </div>
+          <div className="flex-1 space-y-3 custom-scroll overflow-y-auto max-h-[300px] pr-2">
+            {artifacts.length === 0 ? (
+              <p className="text-sm text-white/40 italic">No artifacts discovered.</p>
+            ) : (
+              artifacts.map(a => (
+                <div key={a.artifact_id} className="p-3 bg-white/5 rounded-lg border border-white/5 space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-white text-sm truncate mr-2" title={a.name}>
+                      {a.name}
+                    </span>
+                    <span className="text-[10px] bg-purple-500/20 text-purple-300 uppercase font-bold px-1.5 py-0.5 rounded-sm">
+                      {a.artifact_type}
+                    </span>
+                  </div>
+                  {a.storage_path && (
+                    <div className="text-[10px] text-white/40 font-mono truncate" title={a.storage_path}>
+                      {a.storage_path}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

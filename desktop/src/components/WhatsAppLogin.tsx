@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { QrCode, Loader2, CheckCircle2, XCircle, RefreshCcw, X } from 'lucide-react';
+import { QrCode, Loader2, CheckCircle2, XCircle, RefreshCcw, X, AlertCircle } from 'lucide-react';
 import { whatsappLoginStart, whatsappLoginWait } from '../lib/tauri';
 import { GlassCard } from './GlassCard';
 
@@ -92,6 +92,12 @@ export function WhatsAppLogin({ accountId = 'default', onClose, onSuccess }: Wha
           </div>
           <h2 className="text-xl font-bold text-white">Link WhatsApp</h2>
           <p className="text-sm text-white/60">{message}</p>
+          {message.includes('MVP Mode') && (
+            <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-[10px] text-amber-400 font-bold uppercase tracking-wider">
+              <AlertCircle className="w-3 h-3" />
+              Developer Preview / Mock Mode
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col items-center justify-center min-h-[280px] bg-black/20 rounded-2xl border border-white/5 relative overflow-hidden">

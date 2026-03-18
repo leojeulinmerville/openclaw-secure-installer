@@ -65,4 +65,14 @@ impl RunLinkagesRepository {
         
         Ok(())
     }
+
+    pub async fn list_for_mission(&self, mission_id: Uuid) -> Result<Vec<RunLinkage>, String> {
+        sqlx::query_as::<_, RunLinkage>(
+            "SELECT * FROM run_linkages WHERE mission_id = $1 ORDER BY created_at DESC"
+        )
+        .bind(mission_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| format!("Failed to list run linkages for mission: {}", e))
+    }
 }

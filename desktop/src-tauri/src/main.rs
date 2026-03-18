@@ -189,6 +189,9 @@ fn main() {
         mission_commands::record_decision,
         mission_commands::record_validation,
         mission_commands::create_artifact,
+        mission_commands::list_mission_contracts,
+        mission_commands::list_mission_artifacts,
+        mission_commands::list_mission_run_linkages,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

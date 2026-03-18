@@ -26,6 +26,8 @@ import type {
   WhatsAppLoginStartResult,
   WhatsAppLoginWaitResult,
   Contract,
+  MissionArtifact,
+  RunLinkage,
 } from '../types';
 
 // ── Docker ──────────────────────────────────────────────────────────
@@ -208,6 +210,12 @@ export const startRun = (runId: string) => invoke<Run>('start_run', { runId });
 
 export const listMissionContracts = (missionId: string) =>
   invoke<Contract[]>('list_mission_contracts', { missionId });
+
+export const listMissionArtifacts = (missionId: string) =>
+  invoke<MissionArtifact[]>('list_mission_artifacts', { missionId });
+
+export const listMissionRunLinkages = (missionId: string) =>
+  invoke<RunLinkage[]>('list_mission_run_linkages', { missionId });
 
 export const submitApproval = (runId: string, approvalId: string, decision: 'approved' | 'rejected') => 
     invoke<Run>('submit_approval', { runId, approvalId, decision });

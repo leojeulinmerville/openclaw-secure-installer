@@ -333,14 +333,14 @@ export function createGatewayHttpServer(opts: {
     try {
       const configSnapshot = loadConfig();
       const trustedProxies = configSnapshot.gateway?.trustedProxies ?? [];
-      if (await handleHooksRequest(req, res)) {
-        return;
-      }
       if (
         await handleLocalSessionAuthHttpRequest(req, res, {
           trustedProxies,
         })
       ) {
+        return;
+      }
+      if (await handleHooksRequest(req, res)) {
         return;
       }
       if (

@@ -251,8 +251,9 @@ export function Connections() {
           </div>
         </div>
         <div className="bg-white/5 rounded-lg p-3 text-xs text-white/70 border border-white/10 space-y-2">
-          <p><strong>💡 How Plugins Work:</strong> This page dynamically loads fields based on the integrations installed in your Gateway (Node.js engine). To add a service like WhatsApp, Telegram, or Google Places, ensure the corresponding plugin is active in your backend environment.</p>
-          <p><strong>🔒 Access via Tailscale:</strong> Advanced users can connect to their local OpenClaw Gateway remotely using Tailscale (a secure, zero-config VPN). This allows you to interact with your agents over Telegram/WhatsApp from a mobile device without opening router ports to the public internet.</p>
+          <p><strong>🌐 Desktop-Direct:</strong> These connections are fully integrated into the Desktop UI for no-code setup and testing.</p>
+          <p><strong>🛠️ Gateway-Native:</strong> Advanced plugins and extensions are configured through the OpenClaw Console or config files. Some features may only be partially visible here.</p>
+          <p><strong>🔒 Safe Mode:</strong> When active, network tests for cloud providers may be blocked. Use local providers (Ollama) for fully offline operation.</p>
         </div>
       </div>
 
@@ -417,12 +418,12 @@ function ConnectionGroup(props: {
                 {canTest
                   ? item.test_capabilities.blocked_by_policy
                     ? 'Test blocked by policy while Safe Mode internet is disabled.'
-                    : 'Setup and test available.'
-                  : 'Setup fallback only. Use OpenClaw Console for full flow.'}
+                    : 'Desktop-Direct: Basic setup and testing available.'
+                  : 'Gateway-Native: Requires configuration via OpenClaw Console.'}
               </p>
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => props.onSetup(item.id)} className="glass-button text-xs">
-                  Setup
+                  {canTest ? 'Setup' : 'View Config'}
                 </button>
                 <button
                   onClick={() => props.onTest(item.id, item.schema.fields)}
@@ -431,7 +432,17 @@ function ConnectionGroup(props: {
                 >
                   Test
                 </button>
-                {pairingSupported && !waAccount?.linked && (
+                {item.id !== 'whatsapp' && (
+                  <button 
+                    onClick={() => props.onPair(item.id)} 
+                    className="glass-button text-xs text-cyan-400 hover:bg-cyan-500/10"
+                    title="Open advanced configuration in Gateway Console"
+                  >
+                    <Link2 className="w-3 h-3 mr-1" />
+                    Console
+                  </button>
+                )}
+                {pairingSupported && item.id === 'whatsapp' && !waAccount?.linked && (
                   <button onClick={() => props.onPair(item.id)} className="glass-button-accent text-xs">
                     Pair
                   </button>

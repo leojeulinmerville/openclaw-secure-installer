@@ -129,3 +129,33 @@ pub async fn create_artifact(
     let coordinator = MissionCoordinator::new(state.pool.clone());
     coordinator.create_artifact(mission_uuid, contract_uuid, artifact_type, name).await
 }
+
+#[tauri::command]
+pub async fn list_mission_contracts(
+    mission_id: String,
+    state: State<'_, DbState>
+) -> Result<Vec<crate::repositories::contracts_repository::Contract>, String> {
+    let u_mission_id = Uuid::parse_str(&mission_id).map_err(|e| e.to_string())?;
+    let repo = crate::repositories::contracts_repository::ContractsRepository::new(state.pool.clone());
+    repo.list(u_mission_id).await
+}
+
+#[tauri::command]
+pub async fn list_mission_artifacts(
+    mission_id: String,
+    state: State<'_, DbState>
+) -> Result<Vec<crate::repositories::artifacts_repository::Artifact>, String> {
+    let u_mission_id = Uuid::parse_str(&mission_id).map_err(|e| e.to_string())?;
+    let repo = crate::repositories::artifacts_repository::ArtifactsRepository::new(state.pool.clone());
+    repo.list_for_mission(u_mission_id).await
+}
+
+#[tauri::command]
+pub async fn list_mission_run_linkages(
+    mission_id: String,
+    state: State<'_, DbState>
+) -> Result<Vec<crate::repositories::run_linkages_repository::RunLinkage>, String> {
+    let u_mission_id = Uuid::parse_str(&mission_id).map_err(|e| e.to_string())?;
+    let repo = crate::repositories::run_linkages_repository::RunLinkagesRepository::new(state.pool.clone());
+    repo.list_for_mission(u_mission_id).await
+}

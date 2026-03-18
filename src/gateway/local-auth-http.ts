@@ -40,7 +40,7 @@ export async function handleLocalSessionAuthHttpRequest(
   opts: { trustedProxies?: string[] },
 ): Promise<boolean> {
   const url = new URL(req.url ?? "/", "http://localhost");
-  const pathname = url.pathname;
+  const pathname = url.pathname.replace(/\/+$/, "") || "/";
   if (pathname !== BOOTSTRAP_PATH && pathname !== LOGOUT_PATH) {
     return false;
   }

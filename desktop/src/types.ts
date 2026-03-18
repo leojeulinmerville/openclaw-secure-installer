@@ -401,6 +401,29 @@ export interface Artifact {
   created_at: string;
 }
 
+export interface MissionArtifact {
+  artifact_id: string;
+  mission_id: string;
+  origin_contract_id: string | null;
+  artifact_type: string;
+  name: string;
+  status: string;
+  promotion_state: string;
+  storage_path: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RunLinkage {
+  run_id: string;
+  mission_id: string;
+  contract_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
 // ── Missions ────────────────────────────────────────────────────────
 
 export interface Contract {
