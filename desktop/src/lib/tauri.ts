@@ -175,6 +175,26 @@ export const createRun = (
   } 
 });
 
+export const startContractActivation = (
+  missionId: string,
+  contractId: string,
+  agentId: string,
+  provider: string,
+  model: string,
+  title: string,
+  goal: string,
+  workspacePath: string
+) => invoke<Run>('start_contract_activation', {
+  missionId,
+  contractId,
+  agentId,
+  provider,
+  model,
+  title,
+  goal,
+  workspacePath
+});
+
 export const listModels = () => invoke<string[]>('list_models');
 
 // ── Shared Helpers ──────────────────────────────────────────────────

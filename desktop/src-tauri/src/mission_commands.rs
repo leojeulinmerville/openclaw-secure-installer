@@ -131,6 +131,36 @@ pub async fn create_artifact(
 }
 
 #[tauri::command]
+pub async fn start_contract_activation(
+    app: tauri::AppHandle,
+    mission_id: String,
+    contract_id: String,
+    agent_id: String,
+    provider: String,
+    model: String,
+    title: String,
+    goal: String,
+    workspace_path: String,
+    state: State<'_, DbState>
+) -> Result<crate::runs::Run, String> {
+    let mission_uuid = Uuid::parse_str(&mission_id).map_err(|e| e.to_string())?;
+    let contract_uuid = Uuid::parse_str(&contract_id).map_err(|e| e.to_string())?;
+    let coordinator = MissionCoordinator::new(state.pool.clone());
+    
+    coordinator.start_contract_activation(
+        app, 
+        mission_uuid, 
+        contract_uuid, 
+        agent_id, 
+        provider, 
+        model, 
+        title, 
+        goal, 
+        workspace_path
+    ).await
+}
+
+#[tauri::command]
 pub async fn list_mission_contracts(
     mission_id: String,
     state: State<'_, DbState>

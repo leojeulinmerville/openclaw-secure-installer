@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { createRun, startRun, listAgents } from '../lib/tauri';
+import { createRun, startRun, listAgents, startContractActivation } from '../lib/tauri';
 import type { AgentListItem } from '../types';
 import { Play, ArrowLeft, Bot, FolderOpen, Loader2, AlertCircle } from 'lucide-react';
 
@@ -77,20 +77,34 @@ export function CreateRun({ onNavigate, missionId, contractId }: CreateRunProps)
       const agent = agents.find(a => a.id === selectedAgentId);
       if (!agent) throw new Error("Agent not found");
 
-      const run = await createRun(
-        agent.id,
-        agent.provider,
-        agent.model,
-        title,
-        goal,
-        workspacePath || agent.workspacePath,
-        missionId,
-        contractId
-      );
+      let run;
+      if (missionId && contractId) {
+        // Elevated coordinator flow: Coordinator is the orchestrator authority for mission-bound runs
+        run = await startContractActivation(
+          missionId,
+          contractId,
+          agent.id,
+          agent.provider,
+          agent.model,
+          title,
+          goal,
+          workspacePath || agent.workspacePath
+        );
+      } else {
+        // Subordinate CLI flow: UI triggers a standalone run directly
+        run = await createRun(
+          agent.id,
+          agent.provider,
+          agent.model,
+          title,
+          goal,
+          workspacePath || agent.workspacePath,
+          missionId, // Might just be a loose mission linkage without a contract
+          contractId
+        );
+        await startRun(run.id);
+      }
       
-      // Auto-start the run immediately
-      await startRun(run.id);
-      // Navigate to the run detail page
       onNavigate('run-detail', run.id);
     } catch (err) {
       setError(String(err));

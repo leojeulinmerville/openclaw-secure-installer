@@ -192,6 +192,7 @@ fn main() {
         mission_commands::list_mission_contracts,
         mission_commands::list_mission_artifacts,
         mission_commands::list_mission_run_linkages,
+        mission_commands::start_contract_activation,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

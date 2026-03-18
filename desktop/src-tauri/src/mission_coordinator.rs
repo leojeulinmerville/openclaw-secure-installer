@@ -1,5 +1,6 @@
 use sqlx::PgPool;
 use uuid::Uuid;
+use tauri::AppHandle;
 pub use crate::repositories::missions_repository::Mission;
 use crate::repositories::mission_state_projections_repository::MissionStateProjection;
 use crate::services::mission_service::MissionService;
@@ -87,5 +88,34 @@ impl MissionCoordinator {
         let artifact = self.contract_service.create_artifact(mission_id, contract_id, artifact_type, name).await?;
         self.projection_service.refresh_projection(mission_id).await?;
         Ok(artifact)
+    }
+
+    pub async fn start_contract_activation(
+        &self,
+        app: AppHandle,
+        mission_id: Uuid,
+        contract_id: Uuid,
+        agent_id: String,
+        provider: String,
+        model: String,
+        title: String,
+        goal: String,
+        workspace_path: String,
+    ) -> Result<crate::runs::Run, String> {
+        let request = crate::runs::CreateRunRequest {
+            agent_id,
+            provider,
+            model,
+            title,
+            user_goal: goal,
+            workspace_path,
+            mission_id: Some(mission_id.to_string()),
+            contract_id: Some(contract_id.to_string()),
+        };
+
+        let run = crate::runs::create_run(app.clone(), request).await?;
+        crate::runs::start_run(app, run.id.clone()).await?;
+
+        Ok(run)
     }
 }
