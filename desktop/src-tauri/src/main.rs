@@ -17,6 +17,9 @@ mod services;
 mod mission_coordinator;
 mod mission_commands;
 
+#[cfg(test)]
+mod tests;
+
 use tauri::Manager;
 use crate::runtime_pgsql::PgRuntimeManager;
 use crate::db::DbState;

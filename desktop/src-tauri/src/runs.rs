@@ -500,43 +500,51 @@ async fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, err
      }
 }
 
-async fn reconcile_run_status(app: &AppHandle, run_id: &str, status: RunStatus) -> Result<(), String> {
-    let state = app.try_state::<DbState>();
-    if let Some(db) = state {
-        let repo = RunLinkagesRepository::new(db.pool.clone());
-        let status_str = match status {
-            RunStatus::Queued => "queued",
-            RunStatus::Running => "running",
-            RunStatus::Blocked => "blocked",
-            RunStatus::Done => "done",
-            RunStatus::Failed => "failed",
-            RunStatus::Cancelled => "cancelled",
-        }.to_string();
+pub async fn reconcile_run_status_core(pool: &sqlx::PgPool, run_id: &str, status: RunStatus) -> Result<Option<uuid::Uuid>, String> {
+    let repo = RunLinkagesRepository::new(pool.clone());
+    let status_str = match status {
+        RunStatus::Queued => "queued",
+        RunStatus::Running => "running",
+        RunStatus::Blocked => "blocked",
+        RunStatus::Done => "done",
+        RunStatus::Failed => "failed",
+        RunStatus::Cancelled => "cancelled",
+    }.to_string();
 
-        if let Ok(linkage) = repo.get_by_run_id(run_id).await {
-            let _ = repo.update_status(run_id, status_str.clone()).await;
+    if let Ok(linkage) = repo.get_by_run_id(run_id).await {
+        let _ = repo.update_status(run_id, status_str.clone()).await;
 
-            // ── Bridge: update contract status based on run terminal state ──
-            let contracts_repo = crate::repositories::contracts_repository::ContractsRepository::new(db.pool.clone());
-            match status {
-                RunStatus::Running => {
-                    let _ = contracts_repo.update_status(linkage.contract_id, "active".to_string()).await;
-                }
-                RunStatus::Done => {
-                    let _ = contracts_repo.update_status(linkage.contract_id, "fulfilled".to_string()).await;
-                }
-                RunStatus::Failed | RunStatus::Cancelled => {
-                    let _ = contracts_repo.update_status(linkage.contract_id, "failed".to_string()).await;
-                }
-                RunStatus::Blocked => {
-                    let _ = contracts_repo.update_status(linkage.contract_id, "blocked".to_string()).await;
-                }
-                _ => {}
+        // ── Bridge: update contract status based on run terminal state ──
+        let contracts_repo = crate::repositories::contracts_repository::ContractsRepository::new(pool.clone());
+        match status {
+            RunStatus::Running => {
+                let _ = contracts_repo.update_status(linkage.contract_id, "active".to_string()).await;
             }
+            RunStatus::Done => {
+                let _ = contracts_repo.update_status(linkage.contract_id, "fulfilled".to_string()).await;
+            }
+            RunStatus::Failed | RunStatus::Cancelled => {
+                let _ = contracts_repo.update_status(linkage.contract_id, "failed".to_string()).await;
+            }
+            RunStatus::Blocked => {
+                let _ = contracts_repo.update_status(linkage.contract_id, "blocked".to_string()).await;
+            }
+            _ => {}
+        }
 
-            // ── Bridge: write validation record on terminal states ──
-            if matches!(status, RunStatus::Done | RunStatus::Failed | RunStatus::Cancelled) {
-                let validation_repo = crate::repositories::validation_records_repository::ValidationRecordsRepository::new(db.pool.clone());
+        // ── Bridge: write validation record on terminal states ──
+        if matches!(status, RunStatus::Done | RunStatus::Failed | RunStatus::Cancelled) {
+            let validation_repo = crate::repositories::validation_records_repository::ValidationRecordsRepository::new(pool.clone());
+            
+            // Check for idempotence: Do we already have a completion record for this run?
+            let existing_validations = validation_repo.list_for_mission(linkage.mission_id).await.unwrap_or_default();
+            let already_handled = existing_validations.iter().any(|v| {
+                v.scope == "run_completion" && v.metadata.as_ref().map_or(false, |m| {
+                    m.get("run_id").and_then(|id| id.as_str()) == Some(run_id)
+                })
+            });
+
+            if !already_handled {
                 let outcome = if matches!(status, RunStatus::Done) { "pass" } else { "fail" };
                 let summary = format!(
                     "Run {} completed with status: {}",
@@ -551,25 +559,36 @@ async fn reconcile_run_status(app: &AppHandle, run_id: &str, status: RunStatus) 
                     Some(serde_json::json!({ "run_id": run_id, "status": status_str })),
                 ).await;
             }
+        }
 
-            // Refresh mission projection
-            let projection_service = ProjectionService::new(db.pool.clone());
-            if projection_service.refresh_projection(linkage.mission_id).await.is_ok() {
-                // Emit event to UI for live update only if refresh succeeded
-                let _ = app.emit("mission-projection-updated", linkage.mission_id);
-            }
+        // Refresh mission projection
+        let projection_service = ProjectionService::new(pool.clone());
+        let is_refreshed = projection_service.refresh_projection(linkage.mission_id).await.is_ok();
 
-            // Create ResumeSnapshot when run ends
-            if matches!(status, RunStatus::Done | RunStatus::Failed | RunStatus::Blocked) {
-                let snapshots_repo = ResumeSnapshotsRepository::new(db.pool.clone());
-                let _ = snapshots_repo.create(
-                    linkage.mission_id,
-                    format!("Run {} ended with status {}", run_id, status_str),
-                    Some("auto".to_string()),
-                    Some("Review run artifacts and determine next step".to_string()),
-                    Some(serde_json::json!({ "run_id": run_id, "status": status_str }))
-                ).await;
-            }
+        // Create ResumeSnapshot when run ends
+        if matches!(status, RunStatus::Done | RunStatus::Failed | RunStatus::Blocked) {
+            let snapshots_repo = ResumeSnapshotsRepository::new(pool.clone());
+            let _ = snapshots_repo.create(
+                linkage.mission_id,
+                format!("Run {} ended with status {}", run_id, status_str),
+                Some("auto".to_string()),
+                Some("Review run artifacts and determine next step".to_string()),
+                Some(serde_json::json!({ "run_id": run_id, "status": status_str }))
+            ).await;
+        }
+
+        if is_refreshed {
+            return Ok(Some(linkage.mission_id));
+        }
+    }
+    Ok(None)
+}
+
+async fn reconcile_run_status(app: &AppHandle, run_id: &str, status: RunStatus) -> Result<(), String> {
+    let state = app.try_state::<DbState>();
+    if let Some(db) = state {
+        if let Ok(Some(mission_id)) = reconcile_run_status_core(&db.pool, run_id, status).await {
+            let _ = app.emit("mission-projection-updated", mission_id);
         }
     }
     Ok(())
