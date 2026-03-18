@@ -512,6 +512,11 @@ pub async fn reconcile_run_status_core(pool: &sqlx::PgPool, run_id: &str, status
     }.to_string();
 
     if let Ok(linkage) = repo.get_by_run_id(run_id).await {
+        // Idempotence check: Skip if status is already correct
+        if linkage.status == status_str {
+            return Ok(Some(linkage.mission_id));
+        }
+
         let _ = repo.update_status(run_id, status_str.clone()).await;
 
         // ── Bridge: update contract status based on run terminal state ──
@@ -528,6 +533,17 @@ pub async fn reconcile_run_status_core(pool: &sqlx::PgPool, run_id: &str, status
             }
             RunStatus::Blocked => {
                 let _ = contracts_repo.update_status(linkage.contract_id, "blocked".to_string()).await;
+                
+                // Record system-initiated block decision (intervention needed)
+                let decision_repo = crate::repositories::decision_records_repository::DecisionRecordsRepository::new(pool.clone());
+                let _ = decision_repo.create(
+                    linkage.mission_id,
+                    "run_blocked".to_string(),
+                    format!("Run {} entered blocked state. Intervention may be required.", run_id),
+                    None,
+                    Some("system".to_string()),
+                    Some(format!("Run status: {}", status_str)),
+                ).await;
             }
             _ => {}
         }

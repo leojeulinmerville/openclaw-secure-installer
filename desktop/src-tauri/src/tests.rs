@@ -111,7 +111,30 @@ async fn test_mission_lifecycle_truth_sequence() {
     let fail_val = val_after_fail.into_iter().find(|v| v.outcome == "fail").expect("Fail validation missing");
     assert!(fail_val.summary.unwrap().contains(&run_id2), "Validation summary must contain run ID");
 
-    // ── 8. Operator Intervention Record ──
+    // ── 8. Blocked Run (Automatic Decision Record) ──
+    let contract3 = coordinator.admit_contract(
+        mission.id,
+        "action".to_string(),
+        "Verify block mapping".to_string()
+    ).await.unwrap();
+
+    let run_id3 = Uuid::new_v4().to_string();
+    run_linkages_repo.create(
+        mission.id,
+        contract3.id,
+        run_id3.clone(),
+        Some("test_agent".to_string())
+    ).await.unwrap();
+
+    let _ = reconcile_run_status_core(&pool, &run_id3, RunStatus::Blocked).await;
+    let up_contract3 = contracts_repo.get(contract3.id).await.unwrap();
+    assert_eq!(up_contract3.status, "blocked", "Blocked status must map to blocked contract status.");
+
+    let decs_after_block = decisions_repo.list_latest_for_mission(mission.id, 10).await.unwrap();
+    let block_dec = decs_after_block.iter().find(|d| d.decision_type == "run_blocked").expect("Run blocked decision record missing");
+    assert!(block_dec.summary.contains(&run_id3));
+
+    // ── 9. Operator Intervention Record ──
     let decision = coordinator.record_decision(
         mission.id, 
         "operator_intervention".to_string(), 
@@ -122,6 +145,6 @@ async fn test_mission_lifecycle_truth_sequence() {
 
     assert_eq!(decision.decision_type, "operator_intervention");
     
-    let decs_after = decisions_repo.list_for_mission(mission.id).await.unwrap();
-    assert_eq!(decs_after.len(), 1, "Decision record should be correctly written to repository.");
+    let decs_after = decisions_repo.list_latest_for_mission(mission.id, 10).await.unwrap();
+    assert!(decs_after.iter().any(|d| d.decision_id == decision.decision_id), "Manual decision record missing");
 }
