@@ -189,3 +189,25 @@ pub async fn list_mission_run_linkages(
     let repo = crate::repositories::run_linkages_repository::RunLinkagesRepository::new(state.pool.clone());
     repo.list_for_mission(u_mission_id).await
 }
+
+#[tauri::command]
+pub async fn list_mission_decisions(
+    mission_id: String,
+    limit: i64,
+    state: State<'_, DbState>
+) -> Result<Vec<DecisionRecord>, String> {
+    let u_mission_id = Uuid::parse_str(&mission_id).map_err(|e| e.to_string())?;
+    let repo = crate::repositories::decision_records_repository::DecisionRecordsRepository::new(state.pool.clone());
+    repo.list_latest_for_mission(u_mission_id, limit).await
+}
+
+#[tauri::command]
+pub async fn list_mission_validations(
+    mission_id: String,
+    limit: i64,
+    state: State<'_, DbState>
+) -> Result<Vec<ValidationRecord>, String> {
+    let u_mission_id = Uuid::parse_str(&mission_id).map_err(|e| e.to_string())?;
+    let repo = crate::repositories::validation_records_repository::ValidationRecordsRepository::new(state.pool.clone());
+    repo.list_latest_for_mission(u_mission_id, limit).await
+}

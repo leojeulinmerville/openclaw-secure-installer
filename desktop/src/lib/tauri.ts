@@ -28,6 +28,8 @@ import type {
   Contract,
   MissionArtifact,
   RunLinkage,
+  DecisionRecord,
+  ValidationRecord,
 } from '../types';
 
 // ── Docker ──────────────────────────────────────────────────────────
@@ -236,6 +238,12 @@ export const listMissionArtifacts = (missionId: string) =>
 
 export const listMissionRunLinkages = (missionId: string) =>
   invoke<RunLinkage[]>('list_mission_run_linkages', { missionId });
+
+export const listMissionDecisions = (missionId: string, limit: number = 10) =>
+  invoke<DecisionRecord[]>('list_mission_decisions', { missionId, limit });
+
+export const listMissionValidations = (missionId: string, limit: number = 10) =>
+  invoke<ValidationRecord[]>('list_mission_validations', { missionId, limit });
 
 export const submitApproval = (runId: string, approvalId: string, decision: 'approved' | 'rejected') => 
     invoke<Run>('submit_approval', { runId, approvalId, decision });

@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { Mission, MissionStateProjection, Contract, MissionArtifact, RunLinkage } from '../types';
-import { listMissionContracts, listMissionArtifacts, listMissionRunLinkages } from '../lib/tauri';
+import type { Mission, MissionStateProjection, Contract, MissionArtifact, RunLinkage, DecisionRecord, ValidationRecord } from '../types';
+import { listMissionContracts, listMissionArtifacts, listMissionRunLinkages, listMissionDecisions, listMissionValidations } from '../lib/tauri';
 import { 
   Shield, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, 
   ChevronLeft, Calendar, FileText, Pause, Play, RefreshCw 
@@ -19,6 +19,8 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [artifacts, setArtifacts] = useState<MissionArtifact[]>([]);
   const [runs, setRuns] = useState<RunLinkage[]>([]);
+  const [decisions, setDecisions] = useState<DecisionRecord[]>([]);
+  const [validations, setValidations] = useState<ValidationRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -67,14 +69,18 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
 
   const loadLinkedData = async () => {
     try {
-      const [contractsData, artifactsData, runsData] = await Promise.all([
+      const [contractsData, artifactsData, runsData, decisionsData, validationsData] = await Promise.all([
         listMissionContracts(missionId),
         listMissionArtifacts(missionId),
-        listMissionRunLinkages(missionId)
+        listMissionRunLinkages(missionId),
+        listMissionDecisions(missionId, 10),
+        listMissionValidations(missionId, 10)
       ]);
       setContracts(contractsData);
       setArtifacts(artifactsData);
       setRuns(runsData);
+      setDecisions(decisionsData);
+      setValidations(validationsData);
     } catch (e) {
       console.error('Failed to load linked data', e);
     }
@@ -445,6 +451,76 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
                       {a.storage_path}
                     </div>
                   )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Governance Feeds (Block 4.5) ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-8">
+        {/* Decision Feed */}
+        <div className="glass-panel p-6 space-y-4 flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4 text-emerald-400" />
+              <h3 className="font-bold text-white">Decision Feed</h3>
+            </div>
+          </div>
+          <div className="flex-1 space-y-3 custom-scroll overflow-y-auto max-h-[350px] pr-2">
+            {decisions.length === 0 ? (
+              <p className="text-sm text-white/40 italic">No decisions recorded yet.</p>
+            ) : (
+              decisions.map(d => (
+                <div key={d.decision_id} className="p-3 bg-white/5 rounded-lg border border-white/5 space-y-2">
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-medium text-white text-sm break-words">{d.summary}</span>
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-[10px] bg-white/10 text-white/60 uppercase font-bold px-1.5 py-0.5 rounded-sm">
+                      {d.decision_type}
+                    </span>
+                    <span className="text-[10px] text-white/40">{new Date(d.created_at).toLocaleString()}</span>
+                  </div>
+                  {d.outcome && (
+                    <div className="text-xs text-emerald-400 font-mono mt-1">Outcome: {d.outcome}</div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Validation Feed */}
+        <div className="glass-panel p-6 space-y-4 flex flex-col">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-cyan-400" />
+              <h3 className="font-bold text-white">Validation Feed</h3>
+            </div>
+          </div>
+          <div className="flex-1 space-y-3 custom-scroll overflow-y-auto max-h-[350px] pr-2">
+            {validations.length === 0 ? (
+              <p className="text-sm text-white/40 italic">No validations recorded yet.</p>
+            ) : (
+              validations.map(v => (
+                <div key={v.validation_id} className={`p-3 rounded-lg border space-y-2 
+                  ${v.is_passing ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-red-500/5 border-red-500/10'}`}>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-medium text-white text-sm break-words">{v.summary}</span>
+                    {v.is_passing ? (
+                      <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                    ) : (
+                      <XCircle className="w-5 h-5 text-red-400 shrink-0" />
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <span className="text-[10px] bg-white/10 text-white/60 uppercase font-bold px-1.5 py-0.5 rounded-sm">
+                      {v.validation_type}
+                    </span>
+                    <span className="text-[10px] text-white/40">{new Date(v.created_at).toLocaleString()}</span>
+                  </div>
                 </div>
               ))
             )}

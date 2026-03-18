@@ -538,3 +538,28 @@ export interface ChatSession {
   updated_at: string;
   messages: ChatMessage[];
 }
+
+export interface DecisionRecord {
+  decision_id: string;
+  mission_id: string;
+  decision_type: string;
+  summary: string;
+  outcome?: string | null;
+  responsibility_tag?: string | null;
+  rationale?: string | null;
+  created_at: string;
+}
+
+export interface ValidationRecord {
+  validation_id: string;
+  mission_id: string;
+  contract_id?: string | null;
+  artifact_id?: string | null;
+  validation_type: string;
+  summary: string;
+  is_passing: boolean;
+  score?: number | null;
+  confidence?: number | null;
+  details?: string | null;
+  created_at: string;
+}
