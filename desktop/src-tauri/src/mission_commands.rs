@@ -131,6 +131,23 @@ pub async fn create_artifact(
 }
 
 #[tauri::command]
+pub async fn add_mission_intervention(
+    mission_id: String,
+    intervention_text: String,
+    state: State<'_, DbState>
+) -> Result<DecisionRecord, String> {
+    let mission_uuid = Uuid::parse_str(&mission_id).map_err(|e| e.to_string())?;
+    let coordinator = MissionCoordinator::new(state.pool.clone());
+    coordinator.record_decision(
+        mission_uuid,
+        "operator_intervention".to_string(), // decision_type
+        intervention_text,                   // summary
+        None,                                // outcome
+        "human_operator".to_string(),        // responsibility
+    ).await
+}
+
+#[tauri::command]
 pub async fn start_contract_activation(
     app: tauri::AppHandle,
     mission_id: String,

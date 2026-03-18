@@ -242,6 +242,9 @@ export const listMissionRunLinkages = (missionId: string) =>
 export const listMissionDecisions = (missionId: string, limit: number = 10) =>
   invoke<DecisionRecord[]>('list_mission_decisions', { missionId, limit });
 
+export const addMissionIntervention = (missionId: string, interventionText: string) =>
+  invoke<DecisionRecord>('add_mission_intervention', { missionId, interventionText });
+
 export const listMissionValidations = (missionId: string, limit: number = 10) =>
   invoke<ValidationRecord[]>('list_mission_validations', { missionId, limit });
 

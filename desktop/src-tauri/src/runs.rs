@@ -18,7 +18,7 @@ use crate::repositories::responsibility_ledger_repository::ResponsibilityLedgerR
 use crate::repositories::resume_snapshots_repository::ResumeSnapshotsRepository;
 use crate::services::projection_service::ProjectionService;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum RunStatus {
     Queued,
@@ -473,6 +473,14 @@ async fn real_run_execution(app: &AppHandle, run_id: &str, provider: &str, model
 
 async fn update_run_status(app: &AppHandle, run_id: &str, status: RunStatus, error: Option<String>) -> Result<(), String> {
      if let Ok(mut run) = get_run(app.clone(), run_id.to_string()).await {
+         if run.status == status {
+             // Idempotence check: if status hasn't changed, only update the error/meta and return without triggering mission reconciliation loop
+             run.error = error.or(run.error);
+             run.updated_at = Utc::now().to_rfc3339();
+             let _ = _update_run_meta(app, &run);
+             return Ok(());
+         }
+
          run.status = status.clone();
          run.updated_at = Utc::now().to_rfc3339();
          run.error = error;

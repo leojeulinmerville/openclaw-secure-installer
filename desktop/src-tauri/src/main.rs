@@ -195,6 +195,7 @@ fn main() {
         mission_commands::start_contract_activation,
         mission_commands::list_mission_decisions,
         mission_commands::list_mission_validations,
+        mission_commands::add_mission_intervention,
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

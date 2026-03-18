@@ -2,10 +2,10 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import type { Mission, MissionStateProjection, Contract, MissionArtifact, RunLinkage, DecisionRecord, ValidationRecord } from '../types';
-import { listMissionContracts, listMissionArtifacts, listMissionRunLinkages, listMissionDecisions, listMissionValidations } from '../lib/tauri';
+import { listMissionContracts, listMissionArtifacts, listMissionRunLinkages, listMissionDecisions, listMissionValidations, addMissionIntervention } from '../lib/tauri';
 import { 
   Shield, Clock, CheckCircle2, XCircle, AlertCircle, Loader2, 
-  ChevronLeft, Calendar, FileText, Pause, Play, RefreshCw 
+  ChevronLeft, Calendar, FileText, Pause, Play, RefreshCw, MessageSquarePlus
 } from 'lucide-react';
 
 interface MissionDetailProps {
@@ -125,6 +125,22 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
     }
   };
 
+  const handleAddIntervention = async () => {
+    const text = window.prompt("Enter intervention details:");
+    if (!text || text.trim() === '') return;
+    
+    setActionLoading(true);
+    try {
+      await addMissionIntervention(missionId, text);
+      await Promise.all([loadMission(), loadProjection(), loadLinkedData()]);
+    } catch (e) {
+      console.error('Failed to add intervention', e);
+      alert('Failed to add intervention: ' + e);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const StatusIcon = ({ status }: { status: string }) => {
     switch (status.toLowerCase()) {
       case 'active': return <Loader2 className="w-4 h-4 text-cyan-400 animate-spin" />;
@@ -189,6 +205,16 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
           >
             <RefreshCw className={`w-3.5 h-3.5 ${actionLoading ? 'animate-spin' : ''}`} />
             Refresh
+          </button>
+
+          <button 
+            onClick={handleAddIntervention}
+            disabled={actionLoading}
+            className="glass-button flex items-center gap-2 px-3 py-1.5 text-xs text-purple-400 border-purple-500/30 hover:bg-purple-500/10"
+            title="Add Operator Intervention"
+          >
+            <MessageSquarePlus className="w-3.5 h-3.5" />
+            Intervene
           </button>
           
           {mission.status === 'active' ? (
