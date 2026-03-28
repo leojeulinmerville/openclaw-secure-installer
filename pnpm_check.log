@@ -1,0 +1,1562 @@
+
+> openclaw@2026.3.10 check D:\MVP\openclaw-secure-installer
+> pnpm tsgo && pnpm lint && pnpm format
+
+
+> openclaw@2026.3.10 lint D:\MVP\openclaw-secure-installer
+> oxlint --type-aware
+
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[src/infra/safe-mode.test.ts:26:15]
+ 25 |       // If exec.ts throws before calling execFile, this mock won't be reached for blocked commands.
+ 26 |       if (cb) cb(null, "mock stdout", "mock stderr");
+    :               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 27 |       return { stdout: "mock stdout", stderr: "mock stderr" };
+    `----
+  help: Replace `cb(null, "mock stdout", "mock stderr");` with `{cb(null, "mock stdout", "mock stderr");}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[src/infra/safe-mode.test.ts:178:56]
+ 177 |         nextConfig: {},
+ 178 |         settings: { port: 1234, bind: "localhost" } as any,
+     :                                                        ^^^
+ 179 |         prompter: mockPrompter,
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[src/infra/safe-mode.test.ts:180:40]
+ 179 |         prompter: mockPrompter,
+ 180 |         runtime: { error: vi.fn() } as any,
+     :                                        ^^^
+ 181 |         workspaceDir: os.tmpdir(),
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+   ,-[scripts/create-icon-jimp.js:7:12]
+ 6 | new Jimp(1024, 1024, 0x0000FFFF, (err, image) => {
+ 7 |   if (err) throw err;
+   :            ^^^^^^^^^^
+ 8 |   image.write(iconPath, () => {
+   `----
+  help: Replace `throw err;` with `{throw err;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[gateway/openclaw.mjs:22:51]
+ 21 | function log(level, msg) {
+ 22 |   if (level === "debug" && LOG_LEVEL !== "debug") return;
+    :                                                   ^^^^^^^
+ 23 |   const ts = new Date().toISOString();
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[gateway/openclaw.mjs:35:35]
+ 34 |   events.push(event);
+ 35 |   if (events.length > MAX_EVENTS) events = events.slice(-MAX_EVENTS);
+    :                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 36 |   return event;
+    `----
+  help: Replace `events = events.slice(-MAX_EVENTS);` with `{events = events.slice(-MAX_EVENTS);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[gateway/openclaw.mjs:122:23]
+ 121 |         const idx = registeredAgents.findIndex((a) => a.name === agent.name);
+ 122 |         if (idx >= 0) registeredAgents[idx] = agent;
+     :                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 123 |         else registeredAgents.push(agent);
+     `----
+  help: Replace `registeredAgents[idx] = agent;` with `{registeredAgents[idx] = agent;}`.
+
+  x eslint(curly): Expected { after 'else'.
+     ,-[gateway/openclaw.mjs:123:14]
+ 122 |         if (idx >= 0) registeredAgents[idx] = agent;
+ 123 |         else registeredAgents.push(agent);
+     :              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 124 |         pushEvent("agent_registered", { agent_name: agent.name });
+     `----
+  help: Replace `registeredAgents.push(agent);` with `{registeredAgents.push(agent);}`.
+
+  x eslint(no-unused-vars): Identifier 'process' is imported but never used.
+   ,-[src/plugins/discovery.ts:3:8]
+ 2 | import path from "node:path";
+ 3 | import process from "node:process";
+   :        ^^^|^^^
+   :           `-- 'process' is imported here
+ 4 | import type { PluginDiagnostic, PluginOrigin } from "./types.js";
+   `----
+  help: Consider removing this import.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[src/commands/agent.ts:341:24]
+ 340 |     // This takes precedence over defaults and session history.
+ 341 |     if (opts.provider) provider = opts.provider;
+     :                        ^^^^^^^^^^^^^^^^^^^^^^^^^
+ 342 |     if (opts.model) model = opts.model;
+     `----
+  help: Replace `provider = opts.provider;` with `{provider = opts.provider;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[src/commands/agent.ts:342:21]
+ 341 |     if (opts.provider) provider = opts.provider;
+ 342 |     if (opts.model) model = opts.model;
+     :                     ^^^^^^^^^^^^^^^^^^^
+ 343 | 
+     `----
+  help: Replace `model = opts.model;` with `{model = opts.model;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[src/gateway/net.ts:24:12]
+ 23 | export function isPrivateIpAddress(ip: string | undefined): boolean {
+ 24 |   if (!ip) return false;
+    :            ^^^^^^^^^^^^^
+ 25 |   const normalized = normalizeIPv4MappedAddress(ip).toLowerCase();
+    `----
+  help: Replace `return false;` with `{return false;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[src/gateway/net.ts:26:37]
+ 25 |   const normalized = normalizeIPv4MappedAddress(ip).toLowerCase();
+ 26 |   if (normalized.startsWith("10.")) return true;
+    :                                     ^^^^^^^^^^^^
+ 27 |   if (normalized.startsWith("192.168.")) return true;
+    `----
+  help: Replace `return true;` with `{return true;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[src/gateway/net.ts:27:42]
+ 26 |   if (normalized.startsWith("10.")) return true;
+ 27 |   if (normalized.startsWith("192.168.")) return true;
+    :                                          ^^^^^^^^^^^^
+ 28 |   if (normalized.startsWith("172.")) {
+    `----
+  help: Replace `return true;` with `{return true;}`.
+
+  x eslint-plugin-unicorn(no-array-sort): Use `Array#toSorted()` instead of `Array#sort()`.
+     ,-[src/gateway/capabilities-http.ts:192:6]
+ 191 |   return Array.from(orchestratorIds)
+ 192 |     .sort((a, b) => a.localeCompare(b))
+     :      ^^^^
+ 193 |     .map((id) => ({
+     `----
+  help: `Array#sort()` mutates the original array. Use `Array#toSorted()` to return a new sorted array without modifying the original.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[packages/mcp-sql-server/src/index.ts:108:23]
+ 107 |         }
+ 108 |       } catch (error: any) {
+     :                       ^^^
+ 109 |         return {
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[packages/mcp-sql-server/src/index.ts:137:37]
+ 136 | 
+ 137 |   private handleDescribeTable(args: any) {
+     :                                     ^^^
+ 138 |     const { table } = args;
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[packages/mcp-sql-server/src/index.ts:170:21]
+ 169 |       };
+ 170 |     } catch (error: any) {
+     :                     ^^^
+ 171 |       throw new McpError(ErrorCode.InternalError, `Failed to describe table: ${error.message}`);
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[packages/mcp-sql-server/src/index.ts:175:33]
+ 174 | 
+ 175 |   private handleReadQuery(args: any) {
+     :                                 ^^^
+ 176 |     const { sql } = args;
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[packages/mcp-sql-server/src/index.ts:196:21]
+ 195 |       };
+ 196 |     } catch (error: any) {
+     :                     ^^^
+ 197 |       throw new McpError(ErrorCode.InternalError, `Query execution failed: ${error.message}`);
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint-plugin-unicorn(prefer-add-event-listener): Prefer `addEventListener()` over their `on`-function counterparts.
+    ,-[packages/mcp-sql-server/src/index.ts:43:17]
+ 42 |     
+ 43 |     this.server.onerror = (error) => console.error('[MCP Error]', error);
+    :                 ^^^^^^^
+ 44 |     process.on('SIGINT', async () => {
+    `----
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/Providers.tsx:43:28]
+ 42 |   const saveOpenaiKey = async () => {
+ 43 |     if (!openaiKey.trim()) return;
+    :                            ^^^^^^^
+ 44 |     setOpenaiSaving(true);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[desktop/src/pages/Providers.tsx:166:12]
+ 165 |     // Load initial state
+ 166 |     invoke<any>('get_state').then(state => {
+     :            ^^^
+ 167 |         setStopAgents(state.stop_agents_on_gateway_stop || false);
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[desktop/src/pages/Providers.tsx:362:34]
+ 361 |       if (result && result.length > 0) {
+ 362 |         setModels(result.map((m: any) => typeof m === 'string' ? m : m.name || m.id));
+     :                                  ^^^
+ 363 |       } else {
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/Missions.tsx:40:48]
+ 39 |   const handleCreateMission = async () => {
+ 40 |     if (!newMissionTitle || !newMissionIntent) return;
+    :                                                ^^^^^^^
+ 41 |     
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/App.tsx:34:17]
+ 33 |     setPage(p);
+ 34 |     if (detail) setAgentDetailId(detail);
+    :                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+ 35 |   };
+    `----
+  help: Replace `setAgentDetailId(detail);` with `{setAgentDetailId(detail);}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/Overview.tsx:40:47]
+ 39 |           {!isGatewayReady && (
+ 40 |             <button onClick={() => (window as any).navigate('setup')} className="glass-button-accent text-sm flex items-center gap-2 animate-pulse">
+    :                                               ^^^
+ 41 |               <ShieldCheck className="w-4 h-4" /> Setup Gateway
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[desktop/src/pages/Connections.tsx:400:65]
+ 399 |           // WhatsApp specific metadata from status
+ 400 |           const waAccount = item.id === 'whatsapp' ? (status as any)?.accounts?.default : null;
+     :                                                                 ^^^
+ 401 |           const linkedNumber = waAccount?.self?.e164;
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+   ,-[desktop/src/lib/format.ts:5:21]
+ 4 |   const seconds = Math.floor(ms / 1000);
+ 5 |   if (seconds < 60) return `${seconds}s`;
+   :                     ^^^^^^^^^^^^^^^^^^^^^
+ 6 |   const minutes = Math.floor(seconds / 60);
+   `----
+  help: Replace `return `${seconds}s`;` with `{return `${seconds}s`;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+   ,-[desktop/src/lib/format.ts:7:21]
+ 6 |   const minutes = Math.floor(seconds / 60);
+ 7 |   if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
+   :                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 8 |   const hours = Math.floor(minutes / 60);
+   `----
+  help: Replace `return `${minutes}m ${seconds % 60}s`;` with `{return `${minutes}m ${seconds % 60}s`;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/lib/format.ts:9:19]
+  8 |   const hours = Math.floor(minutes / 60);
+  9 |   if (hours < 24) return `${hours}h ${minutes % 60}m`;
+    :                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 10 |   const days = Math.floor(hours / 24);
+    `----
+  help: Replace `return `${hours}h ${minutes % 60}m`;` with `{return `${hours}h ${minutes % 60}m`;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/lib/format.ts:15:19]
+ 14 | export function formatCost(usd: number): string {
+ 15 |   if (usd < 0.01) return '<$0.01';
+    :                   ^^^^^^^^^^^^^^^^
+ 16 |   return `$${usd.toFixed(2)}`;
+    `----
+  help: Replace `return '<$0.01';` with `{return '<$0.01';}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/lib/format.ts:20:15]
+ 19 | export function formatBytes(mb: number): string {
+ 20 |   if (mb < 1) return `${Math.round(mb * 1024)} KB`;
+    :               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 21 |   if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    `----
+  help: Replace `return `${Math.round(mb * 1024)} KB`;` with `{return `${Math.round(mb * 1024)} KB`;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/lib/format.ts:21:18]
+ 20 |   if (mb < 1) return `${Math.round(mb * 1024)} KB`;
+ 21 |   if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    :                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 22 |   return `${(mb / 1024).toFixed(2)} GB`;
+    `----
+  help: Replace `return `${mb.toFixed(1)} MB`;` with `{return `${mb.toFixed(1)} MB`;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/lib/format.ts:32:21]
+ 31 |   const seconds = Math.floor(diff / 1000);
+ 32 |   if (seconds < 60) return 'just now';
+    :                     ^^^^^^^^^^^^^^^^^^
+ 33 |   const minutes = Math.floor(seconds / 60);
+    `----
+  help: Replace `return 'just now';` with `{return 'just now';}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/lib/format.ts:34:21]
+ 33 |   const minutes = Math.floor(seconds / 60);
+ 34 |   if (minutes < 60) return `${minutes}m ago`;
+    :                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+ 35 |   const hours = Math.floor(minutes / 60);
+    `----
+  help: Replace `return `${minutes}m ago`;` with `{return `${minutes}m ago`;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/lib/format.ts:36:19]
+ 35 |   const hours = Math.floor(minutes / 60);
+ 36 |   if (hours < 24) return `${hours}h ago`;
+    :                   ^^^^^^^^^^^^^^^^^^^^^^^
+ 37 |   const days = Math.floor(hours / 24);
+    `----
+  help: Replace `return `${hours}h ago`;` with `{return `${hours}h ago`;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/Activity.tsx:36:51]
+ 35 |     const interval = setInterval(() => {
+ 36 |       if (document.visibilityState === 'visible') refresh();
+    :                                                   ^^^^^^^^^^
+ 37 |     }, 10000);
+    `----
+  help: Replace `refresh();` with `{refresh();}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/CreateAgent.tsx:49:22]
+ 48 |       ollamaListModels('http://localhost:11434').then((res: any[]) => {
+ 49 |         if (!active) return;
+    :                      ^^^^^^^
+ 50 |         const names = res && res.length > 0 ? res.map(m => typeof m === 'string' ? m : m.name) : ['llama3', 'mistral'];
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/CreateAgent.tsx:54:22]
+ 53 |       }).catch(() => {
+ 54 |         if (!active) return;
+    :                      ^^^^^^^
+ 55 |         setAvailableModels(['llama3', 'mistral']);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/CreateAgent.tsx:60:22]
+ 59 |       lmstudioListModels('http://localhost:1234/v1').then((res: any[]) => {
+ 60 |         if (!active) return;
+    :                      ^^^^^^^
+ 61 |         const names = res && res.length > 0 ? res.map(m => typeof m === 'string' ? m : m.name || m.id) : ['No models found'];
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/CreateAgent.tsx:65:22]
+ 64 |       }).catch(() => {
+ 65 |         if (!active) return;
+    :                      ^^^^^^^
+ 66 |         setAvailableModels(['Connection failed']);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(no-unneeded-ternary): Unnecessary use of boolean literals in conditional expression
+    ,-[desktop/src/pages/CreateAgent.tsx:38:5]
+ 37 |         step === 1 ? true :
+ 38 | ,->     step === 2 ? true :
+ 39 | `->     true;
+ 40 |     
+    `----
+  help: Remove this ternary operator
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/CreateAgent.tsx:48:61]
+ 47 |     } else if (provider === 'ollama') {
+ 48 |       ollamaListModels('http://localhost:11434').then((res: any[]) => {
+    :                                                             ^^^
+ 49 |         if (!active) return;
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/CreateAgent.tsx:59:65]
+ 58 |     } else if (provider === 'lmstudio') {
+ 59 |       lmstudioListModels('http://localhost:1234/v1').then((res: any[]) => {
+    :                                                                 ^^^
+ 60 |         if (!active) return;
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/Chat.tsx:78:22]
+ 77 |       ollamaListModels(ollamaEndpoint).then((models: any[]) => {
+ 78 |         if (!active) return;
+    :                      ^^^^^^^
+ 79 |         if (models && models.length > 0) {
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/Chat.tsx:88:22]
+ 87 |       }).catch(() => {
+ 88 |         if (!active) return;
+    :                      ^^^^^^^
+ 89 |         setAvailableModels(DEFAULT_OLLAMA_MODELS);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/Chat.tsx:94:22]
+ 93 |       lmstudioListModels(lmstudioEndpoint).then((models: any[]) => {
+ 94 |         if (!active) return;
+    :                      ^^^^^^^
+ 95 |         if (models && models.length > 0) {
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/Chat.tsx:106:22]
+ 105 |       }).catch(() => {
+ 106 |         if (!active) return;
+     :                      ^^^^^^^
+ 107 |         setLmstudioOk(false);
+     `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/Chat.tsx:142:40]
+ 141 |     e.stopPropagation();
+ 142 |     if (!confirm('Delete this chat?')) return;
+     :                                        ^^^^^^^
+ 143 |     try {
+     `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/Chat.tsx:155:47]
+ 154 |   const handleSend = async () => {
+ 155 |     if (!input.trim() || loading || !canChat) return;
+     :                                               ^^^^^^^
+ 156 | 
+     `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/Chat.tsx:189:29]
+ 188 |       await saveChat(newSession);
+ 189 |       if (!activeSessionId) setActiveSessionId(sessionId);
+     :                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 190 |       await loadSessions();
+     `----
+  help: Replace `setActiveSessionId(sessionId);` with `{setActiveSessionId(sessionId);}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/Chat.tsx:77:54]
+ 76 |     } else if (provider === 'ollama') {
+ 77 |       ollamaListModels(ollamaEndpoint).then((models: any[]) => {
+    :                                                      ^^^
+ 78 |         if (!active) return;
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/Chat.tsx:93:58]
+ 92 |     } else if (provider === 'lmstudio') {
+ 93 |       lmstudioListModels(lmstudioEndpoint).then((models: any[]) => {
+    :                                                          ^^^
+ 94 |         if (!active) return;
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/ConnectOllama.tsx:97:16]
+ 96 |     const name = modelName.trim();
+ 97 |     if (!name) return;
+    :                ^^^^^^^
+ 98 |     setPulling(true);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/ConnectOllama.tsx:115:21]
+ 114 |   const handleTestCompletion = async () => {
+ 115 |     if (!testModel) return;
+     :                     ^^^^^^^
+ 116 |     setTesting(true);
+     `----
+  help: Replace `return;` with `{return;}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/ConnectOllama.tsx:48:52]
+ 47 |   const [pullModel_, setPullModel] = useState<string | null>(null);
+ 48 |   const [pullProgress, setPullProgress] = useState<any>(null);
+    :                                                    ^^^
+ 49 |   const [customPullName, setCustomPullName] = useState('');
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/ConnectOllama.tsx:75:17]
+ 74 |       await loadModels();
+ 75 |     } catch (e: any) {
+    :                 ^^^
+ 76 |       setError(e.toString());
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/ConnectOllama.tsx:90:17]
+ 89 |       }
+ 90 |     } catch (e: any) {
+    :                 ^^^
+ 91 |       setError('Connected, but failed to list models: ' + e.toString());
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[desktop/src/pages/ConnectOllama.tsx:105:17]
+ 104 |       await loadModels();
+ 105 |     } catch (e: any) {
+     :                 ^^^
+ 106 |       setError('Pull failed: ' + e.toString());
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[desktop/src/pages/ConnectOllama.tsx:124:17]
+ 123 |       setStep(3);
+ 124 |     } catch (e: any) {
+     :                 ^^^
+ 125 |       setTestError(e.toString());
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/MissionDetail.tsx:130:38]
+ 129 |     const text = window.prompt("Enter intervention details:");
+ 130 |     if (!text || text.trim() === '') return;
+     :                                      ^^^^^^^
+ 131 |     
+     `----
+  help: Replace `return;` with `{return;}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/MissionDetail.tsx:13:22]
+ 12 |   missionId: string;
+ 13 |   onNavigate: (page: any) => void;
+    :                      ^^^
+ 14 | }
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/Runs.tsx:32:64]
+ 31 |     e.stopPropagation();
+ 32 |     if (!confirm('Are you sure you want to delete this run?')) return;
+    :                                                                ^^^^^^^
+ 33 |     try {
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(no-unused-vars): Catch parameter 'e' is caught but never used.
+    ,-[desktop/src/components/WhatsAppLogin.tsx:66:14]
+ 65 |       }
+ 66 |     } catch (e) {
+    :              |
+    :              `-- 'e' is declared here
+ 67 |       // If we are still in waiting state and not closed, it might be a timeout of the wait call itself
+    `----
+  help: Consider handling this error.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/components/OverviewRuntimeCard.tsx:12:26]
+ 11 |   const fetchAgents = async () => {
+ 12 |     if (!isGatewayReady) return;
+    :                          ^^^^^^^
+ 13 |     try {
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/components/OverviewRuntimeCard.tsx:25:29]
+ 24 |     const interval = setInterval(() => {
+ 25 |         if (isGatewayReady) fetchAgents();
+    :                             ^^^^^^^^^^^^^^
+ 26 |     }, 5000);
+    `----
+  help: Replace `fetchAgents();` with `{fetchAgents();}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+   ,-[desktop/src/components/OverviewRuntimeCard.tsx:8:40]
+ 7 |   const { gatewayRunning, isGatewayReady, refresh } = useDesktop();
+ 8 |   const [agents, setAgents] = useState<any[]>([]);
+   :                                        ^^^
+ 9 |   const [processing, setProcessing] = useState(false);
+   `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentsList.tsx:31:22]
+ 30 |         const list = await listAgents();
+ 31 |         if (mounted) setAgents(list);
+    :                      ^^^^^^^^^^^^^^^^
+ 32 |       } catch {
+    `----
+  help: Replace `setAgents(list);` with `{setAgents(list);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentsList.tsx:35:22]
+ 34 |       } finally {
+ 35 |         if (mounted) setLoading(false);
+    :                      ^^^^^^^^^^^^^^^^^^
+ 36 |       }
+    `----
+  help: Replace `setLoading(false);` with `{setLoading(false);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentsList.tsx:42:62]
+ 41 |     const interval = setInterval(() => {
+ 42 |       if (mounted && document.visibilityState === 'visible') doRefresh();
+    :                                                              ^^^^^^^^^^^^
+ 43 |     }, 8000);
+    `----
+  help: Replace `doRefresh();` with `{doRefresh();}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:35:31]
+ 34 |       const a = await getAgentDetail(agentId);
+ 35 |       if (mountedRef.current) setAgent(a);
+    :                               ^^^^^^^^^^^^
+ 36 |     } catch (e) {
+    `----
+  help: Replace `setAgent(a);` with `{setAgent(a);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:37:31]
+ 36 |     } catch (e) {
+ 37 |       if (mountedRef.current) setError(String(e));
+    :                               ^^^^^^^^^^^^^^^^^^^^
+ 38 |     }
+    `----
+  help: Replace `setError(String(e));` with `{setError(String(e));}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:45:17]
+ 44 |   useEffect(() => {
+ 45 |     if (!agent) return;
+    :                 ^^^^^^^
+ 46 |     let intervalId: ReturnType<typeof setInterval> | null = null;
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:49:74]
+ 48 |     const poll = async () => {
+ 49 |       if (!mountedRef.current || document.visibilityState !== 'visible') return;
+    :                                                                          ^^^^^^^
+ 50 | 
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:55:35]
+ 54 |           const l = await agentLogs(agentId, 200);
+ 55 |           if (mountedRef.current) setLogs(l);
+    :                                   ^^^^^^^^^^^
+ 56 |         } catch { /* ignore */ }
+    `----
+  help: Replace `setLogs(l);` with `{setLogs(l);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:60:35]
+ 59 |           const s = await agentStats(agentId);
+ 60 |           if (mountedRef.current) setStats(s);
+    :                                   ^^^^^^^^^^^^
+ 61 |         } catch { /* ignore */ }
+    `----
+  help: Replace `setStats(s);` with `{setStats(s);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:68:46]
+ 67 |           const crashed = await checkAgentCrashloop(agentId);
+ 68 |           if (crashed && mountedRef.current) refresh();
+    :                                              ^^^^^^^^^^
+ 69 |         } catch { /* ignore */ }
+    `----
+  help: Replace `refresh();` with `{refresh();}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:78:32]
+ 77 |     return () => {
+ 78 |       if (intervalId !== null) clearInterval(intervalId);
+    :                                ^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 79 |     };
+    `----
+  help: Replace `clearInterval(intervalId);` with `{clearInterval(intervalId);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:84:17]
+ 83 |   useEffect(() => {
+ 84 |     if (!agent) return;
+    :                 ^^^^^^^
+ 85 |     if (tab === 'logs') {
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:86:67]
+ 85 |     if (tab === 'logs') {
+ 86 |       agentLogs(agentId, 200).then(l => { if (mountedRef.current) setLogs(l); }).catch(() => setLogs('No logs available'));
+    :                                                                   ^^^^^^^^^^^
+ 87 |     }
+    `----
+  help: Replace `setLogs(l);` with `{setLogs(l);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/AgentDetail.tsx:89:63]
+ 88 |     if (tab === 'metrics') {
+ 89 |       agentStats(agentId).then(s => { if (mountedRef.current) setStats(s); }).catch(() => setStats(null));
+    :                                                               ^^^^^^^^^^^^
+ 90 |     }
+    `----
+  help: Replace `setStats(s);` with `{setStats(s);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/AgentDetail.tsx:106:15]
+ 105 | 
+ 106 |   if (!agent) return <div className="page-container"><p className="text-muted">Loading...</p></div>;
+     :               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 107 | 
+     `----
+  help: Replace `return <div className="page-container"><p className="text-muted">Loading...</p></div>;` with `{return <div className="page-container"><p className="text-muted">Loading...</p></div>;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/AgentDetail.tsx:290:92]
+ 289 |               <button className="btn btn-ghost btn-small"
+ 290 |                 onClick={() => agentLogs(agentId, 200).then(l => { if (mountedRef.current) setLogs(l); }).catch(() => {})}>
+     :                                                                                            ^^^^^^^^^^^
+ 291 |                 Refresh
+     `----
+  help: Replace `setLogs(l);` with `{setLogs(l);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/components/steps/Step4Dashboard.tsx:45:64]
+ 44 |   const handleStop = async () => {
+ 45 |     if(!confirm("Are you sure you want to stop the gateway?")) return;
+    :                                                                ^^^^^^^
+ 46 |     setStopping(true);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/CreateRun.tsx:71:60]
+ 70 |     e.preventDefault();
+ 71 |     if (!selectedAgentId || !title.trim() || !goal.trim()) return;
+    :                                                            ^^^^^^^
+ 72 |     
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/CreateRun.tsx:78:19]
+ 77 |       const agent = agents.find(a => a.id === selectedAgentId);
+ 78 |       if (!agent) throw new Error("Agent not found");
+    :                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 79 | 
+    `----
+  help: Replace `throw new Error("Agent not found");` with `{throw new Error("Agent not found");}`.
+
+  x eslint(no-unused-vars): Catch parameter 'e' is caught but never used.
+    ,-[desktop/src/pages/CreateRun.tsx:45:22]
+ 44 |               }
+ 45 |             } catch (e) {}
+    :                      |
+    :                      `-- 'e' is declared here
+ 46 |             sessionStorage.removeItem('openclaw_rerun');
+    `----
+  help: Consider handling this error.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+   ,-[desktop/src/pages/CreateRun.tsx:7:22]
+ 6 | interface CreateRunProps {
+ 7 |   onNavigate: (page: any, id?: string) => void;
+   :                      ^^^
+ 8 |   missionId?: string;
+   `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/components/steps/Step3Gateway.tsx:51:28]
+ 50 |     let img = "";
+ 51 |     if (mode === 'public') img = publicInput;
+    :                            ^^^^^^^^^^^^^^^^^^
+ 52 |     else if (mode === 'private') img = `${registryUrl}/${privateImage}`;
+    `----
+  help: Replace `img = publicInput;` with `{img = publicInput;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/components/steps/Step3Gateway.tsx:52:34]
+ 51 |     if (mode === 'public') img = publicInput;
+ 52 |     else if (mode === 'private') img = `${registryUrl}/${privateImage}`;
+    :                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 53 |     else if (mode === 'local') img = 'openclaw-gateway:dev';
+    `----
+  help: Replace `img = `${registryUrl}/${privateImage}`;` with `{img = `${registryUrl}/${privateImage}`;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/components/steps/Step3Gateway.tsx:53:32]
+ 52 |     else if (mode === 'private') img = `${registryUrl}/${privateImage}`;
+ 53 |     else if (mode === 'local') img = 'openclaw-gateway:dev';
+    :                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 54 |     
+    `----
+  help: Replace `img = 'openclaw-gateway:dev';` with `{img = 'openclaw-gateway:dev';}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/components/steps/Step3Gateway.tsx:97:23]
+ 96 |   const startGateway = async () => {
+ 97 |     if (!activeImage) return alert("No image selected");
+    :                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 98 |     setStarting(true);
+    `----
+  help: Replace `return alert("No image selected");` with `{return alert("No image selected");}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/components/steps/Step3Gateway.tsx:111:26]
+ 110 |         setStartLogs(prev => prev + "✅ " + res.userFriendlyTitle + "\n");
+ 111 |         if (res.warning) setStartLogs(prev => prev + "⚠️ " + res.warning + "\n");
+     :                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 112 |         
+     `----
+  help: Replace `setStartLogs(prev => prev + "⚠️ " + res.warning + "\n");` with `{setStartLogs(prev => prev + "⚠️ " + res.warning + "\n");}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/lib/tauri.ts:204:17]
+ 203 | export function safeFormatDistanceToNow(dateStr?: string | null): string {
+ 204 |   if (!dateStr) return 'Unknown time';
+     :                 ^^^^^^^^^^^^^^^^^^^^^^
+ 205 |   try {
+     `----
+  help: Replace `return 'Unknown time';` with `{return 'Unknown time';}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/lib/tauri.ts:207:29]
+ 206 |     const d = new Date(dateStr);
+ 207 |     if (isNaN(d.getTime())) return 'Unknown time';
+     :                             ^^^^^^^^^^^^^^^^^^^^^^
+ 208 |     return formatDistanceToNow(d, { addSuffix: true });
+     `----
+  help: Replace `return 'Unknown time';` with `{return 'Unknown time';}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/lib/tauri.ts:215:17]
+ 214 | export function safeFormatTime(dateStr?: string | null): string {
+ 215 |   if (!dateStr) return '--:--';
+     :                 ^^^^^^^^^^^^^^^
+ 216 |   try {
+     `----
+  help: Replace `return '--:--';` with `{return '--:--';}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/lib/tauri.ts:218:29]
+ 217 |     const d = new Date(dateStr);
+ 218 |     if (isNaN(d.getTime())) return '--:--';
+     :                             ^^^^^^^^^^^^^^^
+ 219 |     return d.toLocaleTimeString();
+     `----
+  help: Replace `return '--:--';` with `{return '--:--';}`.
+
+  x eslint(no-unused-vars): Catch parameter 'e' is caught but never used.
+     ,-[desktop/src/lib/tauri.ts:209:12]
+ 208 |     return formatDistanceToNow(d, { addSuffix: true });
+ 209 |   } catch (e) {
+     :            |
+     :            `-- 'e' is declared here
+ 210 |     return 'Unknown time';
+     `----
+  help: Consider handling this error.
+
+  x eslint(no-unused-vars): Catch parameter 'e' is caught but never used.
+     ,-[desktop/src/lib/tauri.ts:220:12]
+ 219 |     return d.toLocaleTimeString();
+ 220 |   } catch (e) {
+     :            |
+     :            `-- 'e' is declared here
+ 221 |     return '--:--';
+     `----
+  help: Consider handling this error.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:36:22]
+ 35 |       } finally {
+ 36 |         if (mounted) setLoading(false);
+    :                      ^^^^^^^^^^^^^^^^^^
+ 37 |       }
+    `----
+  help: Replace `setLoading(false);` with `{setLoading(false);}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:49:21]
+ 48 |     listen<any>('run-event', (ev) => {
+ 49 |       if (!mounted) return;
+    :                     ^^^^^^^
+ 50 |       const e = ev.payload as RunEvent & { run_id?: string };
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:52:61]
+ 51 |       // Filter by run_id (emitted as camelCase from Rust via serde)
+ 52 |       if (e.run_id !== runId && (e as any).runId !== runId) return;
+    :                                                             ^^^^^^^
+ 53 |       setEvents(prev => [...prev, e]);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:54:34]
+ 53 |       setEvents(prev => [...prev, e]);
+ 54 |     }).then(fn => { if (mounted) unlistenEvent = fn; });
+    :                                  ^^^^^^^^^^^^^^^^^^^
+ 55 | 
+    `----
+  help: Replace `unlistenEvent = fn;` with `{unlistenEvent = fn;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:57:21]
+ 56 |     listen<any>('run-status', (ev) => {
+ 57 |       if (!mounted) return;
+    :                     ^^^^^^^
+ 58 |       if (ev.payload.run_id !== runId) return;
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:58:40]
+ 57 |       if (!mounted) return;
+ 58 |       if (ev.payload.run_id !== runId) return;
+    :                                        ^^^^^^^
+ 59 |       setRun(prev => prev ? { ...prev, status: ev.payload.status, error: ev.payload.error } : prev);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:60:34]
+ 59 |       setRun(prev => prev ? { ...prev, status: ev.payload.status, error: ev.payload.error } : prev);
+ 60 |     }).then(fn => { if (mounted) unlistenStatus = fn; });
+    :                                  ^^^^^^^^^^^^^^^^^^^^
+ 61 | 
+    `----
+  help: Replace `unlistenStatus = fn;` with `{unlistenStatus = fn;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:75:84]
+ 74 |   const handleDelete = async () => {
+ 75 |     if (!run || !confirm('Are you sure you want to delete this run permanently?')) return;
+    :                                                                                    ^^^^^^^
+ 76 |     try {
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:85:15]
+ 84 |   const handleRerun = () => {
+ 85 |     if (!run) return;
+    :               ^^^^^^^
+ 86 |     sessionStorage.setItem('openclaw_rerun', JSON.stringify({
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+    ,-[desktop/src/pages/RunDetail.tsx:95:15]
+ 94 |   const handleStart = async () => {
+ 95 |     if (!run) return;
+    :               ^^^^^^^
+ 96 |     setStarting(true);
+    `----
+  help: Replace `return;` with `{return;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:127:24]
+ 126 | 
+ 127 |   if (loading && !run) return <div className="p-8 text-center text-white/50 animate-pulse">Loading run details...</div>;
+     :                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 128 |   if (!run) return <div className="p-8 text-center text-red-400">Run not found</div>;
+     `----
+  help: Replace `return <div className="p-8 text-center text-white/50 animate-pulse">Loading run details...</div>;` with `{return <div className="p-8 text-center text-white/50 animate-pulse">Loading run details...</div>;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:128:13]
+ 127 |   if (loading && !run) return <div className="p-8 text-center text-white/50 animate-pulse">Loading run details...</div>;
+ 128 |   if (!run) return <div className="p-8 text-center text-red-400">Run not found</div>;
+     :             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 129 | 
+     `----
+  help: Replace `return <div className="p-8 text-center text-red-400">Run not found</div>;` with `{return <div className="p-8 text-center text-red-400">Run not found</div>;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:324:33]
+ 323 |   const type = event.type as string;
+ 324 |   if (type === 'agent.message') return <p className="whitespace-pre-wrap">{p.content}</p>;
+     :                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 325 |   if (type === 'run.log') return (
+     `----
+  help: Replace `return <p className="whitespace-pre-wrap">{p.content}</p>;` with `{return <p className="whitespace-pre-wrap">{p.content}</p>;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:325:27]
+ 324 |       if (type === 'agent.message') return <p className="whitespace-pre-wrap">{p.content}</p>;
+ 325 | ,->   if (type === 'run.log') return (
+ 326 | |       <div className={clsx("whitespace-pre-wrap", p.stream === 'stderr' ? "text-red-400/70" : "text-white/50")}>
+ 327 | |         {p.content}
+ 328 | |       </div>
+ 329 | `->   );
+ 330 |       if (type === 'artifact.created') return <p>Created artifact: <strong>{p.name}</strong> ({p.type})</p>;
+     `----
+  help: Replace `return (
+            <div className={clsx("whitespace-pre-wrap", p.stream === 'stderr' ? "text-red-400/70" : "text-white/50")}>
+              {p.content}
+            </div>
+          );` with `{return (
+            <div className={clsx("whitespace-pre-wrap", p.stream === 'stderr' ? "text-red-400/70" : "text-white/50")}>
+              {p.content}
+            </div>
+          );}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:330:36]
+ 329 |   );
+ 330 |   if (type === 'artifact.created') return <p>Created artifact: <strong>{p.name}</strong> ({p.type})</p>;
+     :                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 331 |   if (type === 'approval.requested') return (
+     `----
+  help: Replace `return <p>Created artifact: <strong>{p.name}</strong> ({p.type})</p>;` with `{return <p>Created artifact: <strong>{p.name}</strong> ({p.type})</p>;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:331:38]
+ 330 |       if (type === 'artifact.created') return <p>Created artifact: <strong>{p.name}</strong> ({p.type})</p>;
+ 331 | ,->   if (type === 'approval.requested') return (
+ 332 | |       <div className="flex gap-3 items-start">
+ 333 | |         <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0" />
+ 334 | |         <div>
+ 335 | |           <div className="font-bold text-amber-200">Approval Required</div>
+ 336 | |           <p className="text-white/60 text-xs mt-1">{p.summary}</p>
+ 337 | |           <div className="mt-3 flex gap-2">
+ 338 | |             <button onClick={() => onApprove(event.id, 'approved')} className="px-3 py-1 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-xs rounded font-medium">Approve</button>
+ 339 | |             <button onClick={() => onApprove(event.id, 'rejected')} className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 text-xs rounded font-medium">Reject</button>
+ 340 | |           </div>
+ 341 | |         </div>
+ 342 | |       </div>
+ 343 | `->   );
+ 344 |       if (type === 'run.failed') return <p className="text-red-300">{p.reason ?? 'Run failed'}</p>;
+     `----
+  help: Replace `return (
+            <div className="flex gap-3 items-start">
+              <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0" />
+              <div>
+                <div className="font-bold text-amber-200">Approval Required</div>
+                <p className="text-white/60 text-xs mt-1">...` with `{return (
+            <div className="flex gap-3 items-start">
+              <ShieldAlert className="w-5 h-5 text-amber-500 shrink-0" />
+              <div>
+                <div className="font-bold text-amber-200">Approval Required</div>
+                <p className="text-white/60 text-xs mt-1"...`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:344:30]
+ 343 |   );
+ 344 |   if (type === 'run.failed') return <p className="text-red-300">{p.reason ?? 'Run failed'}</p>;
+     :                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 345 |   if (type === 'patch.apply.succeeded') return <p className="text-emerald-300">✓ Patch applied to {(p.files as string[] ?? []).join(', ') || 'workspace'}</p>;
+     `----
+  help: Replace `return <p className="text-red-300">{p.reason ?? 'Run failed'}</p>;` with `{return <p className="text-red-300">{p.reason ?? 'Run failed'}</p>;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:345:41]
+ 344 |   if (type === 'run.failed') return <p className="text-red-300">{p.reason ?? 'Run failed'}</p>;
+ 345 |   if (type === 'patch.apply.succeeded') return <p className="text-emerald-300">✓ Patch applied to {(p.files as string[] ?? []).join(', ') || 'workspace'}</p>;
+     :                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 346 |   if (type === 'run.completed') return <p className="text-emerald-300">✓ Run completed successfully</p>;
+     `----
+  help: Replace `return <p className="text-emerald-300">✓ Patch applied to {(p.files as string[] ?? []).join(', ') || 'workspace'}</p>;` with `{return <p className="text-emerald-300">✓ Patch applied to {(p.files as string[] ?? []).join(', ') || 'workspace'}</p>;}`.
+
+  x eslint(curly): Expected { after 'if' condition.
+     ,-[desktop/src/pages/RunDetail.tsx:346:33]
+ 345 |   if (type === 'patch.apply.succeeded') return <p className="text-emerald-300">✓ Patch applied to {(p.files as string[] ?? []).join(', ') || 'workspace'}</p>;
+ 346 |   if (type === 'run.completed') return <p className="text-emerald-300">✓ Run completed successfully</p>;
+     :                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 347 |   return <pre className="text-xs opacity-60 overflow-x-auto">{JSON.stringify(p, null, 2)}</pre>;
+     `----
+  help: Replace `return <p className="text-emerald-300">✓ Run completed successfully</p>;` with `{return <p className="text-emerald-300">✓ Run completed successfully</p>;}`.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/RunDetail.tsx:48:12]
+ 47 | 
+ 48 |     listen<any>('run-event', (ev) => {
+    :            ^^^
+ 49 |       if (!mounted) return;
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/RunDetail.tsx:52:39]
+ 51 |       // Filter by run_id (emitted as camelCase from Rust via serde)
+ 52 |       if (e.run_id !== runId && (e as any).runId !== runId) return;
+    :                                       ^^^
+ 53 |       setEvents(prev => [...prev, e]);
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+    ,-[desktop/src/pages/RunDetail.tsx:56:12]
+ 55 | 
+ 56 |     listen<any>('run-status', (ev) => {
+    :            ^^^
+ 57 |       if (!mounted) return;
+    `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[desktop/src/pages/RunDetail.tsx:130:93]
+ 129 | 
+ 130 |   const artifacts = events.filter(e => e.type === 'artifact.created').map(e => e.payload as any);
+     :                                                                                             ^^^
+ 131 | 
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[desktop/src/pages/RunDetail.tsx:224:37]
+ 223 |               ? <div className="col-span-2 text-center py-12 text-white/30">No artifacts produced yet</div>
+ 224 |               : artifacts.map((art: any, i: number) => (
+     :                                     ^^^
+ 225 |                 <div key={i} className="bg-white/5 p-4 rounded-lg border border-white/5 hover:border-white/10 transition-colors">
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-explicit-any): Unexpected `any`. Specify a different type.
+     ,-[desktop/src/pages/RunDetail.tsx:322:30]
+ 321 | function EventPayload({ event, onApprove }: { event: RunEvent; onApprove: (id: string, decision: 'approved' | 'rejected') => void }) {
+ 322 |   const p = event.payload as any;
+     :                              ^^^
+ 323 |   const type = event.type as string;
+     `----
+  help: Use `unknown` instead, this will force you to explicitly, and safely, assert the type is correct.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/components/OverviewRuntimeCard.tsx:22:5]
+ 21 |   useEffect(() => {
+ 22 |     fetchAgents();
+    :     ^^^^^^^^^^^^^^
+ 23 |     // Poll for agents every 5s if gateway is running
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+     ,-[desktop/src/contexts/DesktopContext.tsx:109:5]
+ 108 |     };
+ 109 |     init();
+     :     ^^^^^^^
+ 110 |   }, [refreshCore, refreshDockerAndConfig]);
+     `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/components/OverviewRuntimeCard.tsx:25:29]
+ 24 |     const interval = setInterval(() => {
+ 25 |         if (isGatewayReady) fetchAgents();
+    :                             ^^^^^^^^^^^^^^
+ 26 |     }, 5000);
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/components/WhatsAppLogin.tsx:36:9]
+ 35 |         // Start waiting for the scan
+ 36 |         waitLogin();
+    :         ^^^^^^^^^^^^
+ 37 |       } else {
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/components/WhatsAppLogin.tsx:76:5]
+ 75 |   useEffect(() => {
+ 76 |     startLogin();
+    :     ^^^^^^^^^^^^^
+ 77 |   }, []);
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/Activity.tsx:34:5]
+ 33 |   useEffect(() => {
+ 34 |     refresh();
+    :     ^^^^^^^^^^
+ 35 |     const interval = setInterval(() => {
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/Activity.tsx:36:51]
+ 35 |     const interval = setInterval(() => {
+ 36 |       if (document.visibilityState === 'visible') refresh();
+    :                                                   ^^^^^^^^^^
+ 37 |     }, 10000);
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/AgentsList.tsx:39:5]
+ 38 | 
+ 39 |     doRefresh();
+    :     ^^^^^^^^^^^^
+ 40 |     // 8s poll — no per-agent Docker exec to prevent UI freeze
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/AgentDetail.tsx:41:21]
+ 40 | 
+ 41 |   useEffect(() => { refresh(); }, [refresh]);
+    :                     ^^^^^^^^^^
+ 42 | 
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/AgentsList.tsx:42:62]
+ 41 |     const interval = setInterval(() => {
+ 42 |       if (mounted && document.visibilityState === 'visible') doRefresh();
+    :                                                              ^^^^^^^^^^^^
+ 43 |     }, 8000);
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/AgentDetail.tsx:68:46]
+ 67 |           const crashed = await checkAgentCrashloop(agentId);
+ 68 |           if (crashed && mountedRef.current) refresh();
+    :                                              ^^^^^^^^^^
+ 69 |         } catch { /* ignore */ }
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/Chat.tsx:66:5]
+ 65 |   useEffect(() => {
+ 66 |     checkLocalStatus();
+    :     ^^^^^^^^^^^^^^^^^^^
+ 67 |     loadSessions();
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/Chat.tsx:67:5]
+ 66 |     checkLocalStatus();
+ 67 |     loadSessions();
+    :     ^^^^^^^^^^^^^^^
+ 68 |   }, [ollamaEndpoint]);
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+     ,-[desktop/src/pages/Chat.tsx:148:7]
+ 147 |       }
+ 148 |       loadSessions();
+     :       ^^^^^^^^^^^^^^^
+ 149 |     } catch (err) {
+     `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/ConnectOllama.tsx:61:5]
+ 60 |     // Auto-detect on mount
+ 61 |     checkConnection();
+    :     ^^^^^^^^^^^^^^^^^^
+ 62 | 
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/ConnectOllama.tsx:64:7]
+ 63 |     return () => {
+ 64 |       promise.then(f => f());
+    :       ^^^^^^^^^^^^^^^^^^^^^^^
+ 65 |     };
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+     ,-[desktop/src/pages/Connections.tsx:231:13]
+ 230 |             setShowWhatsAppLogin(false);
+ 231 |             load();
+     :             ^^^^^^^
+ 232 |           }}
+     `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/MissionDetail.tsx:29:5]
+ 28 |   useEffect(() => {
+ 29 |     loadMission();
+    :     ^^^^^^^^^^^^^^
+ 30 |     loadProjection();
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/MissionDetail.tsx:30:5]
+ 29 |     loadMission();
+ 30 |     loadProjection();
+    :     ^^^^^^^^^^^^^^^^^
+ 31 |     loadLinkedData();
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/MissionDetail.tsx:31:5]
+ 30 |     loadProjection();
+ 31 |     loadLinkedData();
+    :     ^^^^^^^^^^^^^^^^^
+ 32 | 
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/CreateRun.tsx:58:5]
+ 57 |     }
+ 58 |     load();
+    :     ^^^^^^^
+ 59 |   }, []);
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/MissionDetail.tsx:35:9]
+ 34 |       if (event.payload === missionId) {
+ 35 |         loadMission();
+    :         ^^^^^^^^^^^^^^
+ 36 |         loadProjection();
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/MissionDetail.tsx:36:9]
+ 35 |         loadMission();
+ 36 |         loadProjection();
+    :         ^^^^^^^^^^^^^^^^^
+ 37 |         loadLinkedData();
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/MissionDetail.tsx:37:9]
+ 36 |         loadProjection();
+ 37 |         loadLinkedData();
+    :         ^^^^^^^^^^^^^^^^^
+ 38 |       }
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/MissionDetail.tsx:42:7]
+ 41 |     return () => {
+ 42 |       unlisten.then((f) => f());
+    :       ^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 43 |     };
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/Missions.tsx:22:5]
+ 21 |   useEffect(() => {
+ 22 |     loadMissions();
+    :     ^^^^^^^^^^^^^^^
+ 23 |   }, []);
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(restrict-template-expressions): Invalid type "unknown" of template literal expression.
+    ,-[desktop/src/pages/Missions.tsx:54:42]
+ 53 |       console.error('Failed to create mission', e);
+ 54 |       alert(`Failed to create mission: ${e}`);
+    :                                          ^
+ 55 |     } finally {
+    `----
+
+  x typescript-eslint(restrict-template-expressions): Invalid type "unknown" of template literal expression.
+    ,-[desktop/src/pages/Providers.tsx:51:37]
+ 50 |     } catch (e) {
+ 51 |       setOpenaiTestResult(`Error: ${e}`);
+    :                                     ^
+ 52 |     } finally {
+    `----
+
+  x typescript-eslint(restrict-template-expressions): Invalid type "unknown" of template literal expression.
+    ,-[desktop/src/pages/Providers.tsx:63:37]
+ 62 |     } catch (e) {
+ 63 |       setOpenaiTestResult(`Error: ${e}`);
+    :                                     ^
+ 64 |     }
+    `----
+
+  x typescript-eslint(restrict-template-expressions): Invalid type "unknown" of template literal expression.
+    ,-[desktop/src/pages/Providers.tsx:79:37]
+ 78 |     } catch (e) {
+ 79 |       setOpenaiTestResult(`Error: ${e}`);
+    :                                     ^
+ 80 |     } finally {
+    `----
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/Runs.tsx:15:5]
+ 14 |   useEffect(() => {
+ 15 |     loadRuns();
+    :     ^^^^^^^^^^^
+ 16 |   }, []);
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/RunDetail.tsx:29:5]
+ 28 |         let mounted = true;
+ 29 | ,->     (async () => {
+ 30 | |         try {
+ 31 | |           const [r, e] = await Promise.all([getRun(runId), getRunEvents(runId)]);
+ 32 | |           if (mounted) { setRun(r); setEvents(e); }
+ 33 | |         } catch (err) {
+ 34 | |           console.error(err);
+ 35 | |         } finally {
+ 36 | |           if (mounted) setLoading(false);
+ 37 | |         }
+ 38 | `->     })();
+ 39 |         return () => { mounted = false; };
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/RunDetail.tsx:48:5]
+ 47 |     
+ 48 | ,->     listen<any>('run-event', (ev) => {
+ 49 | |         if (!mounted) return;
+ 50 | |         const e = ev.payload as RunEvent & { run_id?: string };
+ 51 | |         // Filter by run_id (emitted as camelCase from Rust via serde)
+ 52 | |         if (e.run_id !== runId && (e as any).runId !== runId) return;
+ 53 | |         setEvents(prev => [...prev, e]);
+ 54 | `->     }).then(fn => { if (mounted) unlistenEvent = fn; });
+ 55 |     
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/RunDetail.tsx:56:5]
+ 55 |     
+ 56 | ,->     listen<any>('run-status', (ev) => {
+ 57 | |         if (!mounted) return;
+ 58 | |         if (ev.payload.run_id !== runId) return;
+ 59 | |         setRun(prev => prev ? { ...prev, status: ev.payload.status, error: ev.payload.error } : prev);
+ 60 | `->     }).then(fn => { if (mounted) unlistenStatus = fn; });
+ 61 |     
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+     ,-[desktop/src/pages/Providers.tsx:166:5]
+ 165 |         // Load initial state
+ 166 | ,->     invoke<any>('get_state').then(state => {
+ 167 | |           setStopAgents(state.stop_agents_on_gateway_stop || false);
+ 168 | |           setLoading(false);
+ 169 | `->     });
+ 170 |       }, []);
+     `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(restrict-template-expressions): Invalid type "unknown" of template literal expression.
+    ,-[desktop/src/pages/Settings.tsx:59:28]
+ 58 |     } catch (e) {
+ 59 |       setMessage(`Error: ${e}`);
+    :                            ^
+ 60 |     } finally {
+    `----
+
+  x typescript-eslint(restrict-template-expressions): Invalid type "unknown" of template literal expression.
+    ,-[desktop/src/pages/Settings.tsx:70:46]
+ 69 |     } catch (e) {
+ 70 |       setMessage(`Error toggling internet: ${e}`);
+    :                                              ^
+ 71 |     } finally {
+    `----
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+     ,-[desktop/src/pages/Providers.tsx:376:5]
+ 375 |   useEffect(() => {
+ 376 |     runChecks();
+     :     ^^^^^^^^^^^^
+ 377 |   }, []);
+     `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/Setup.tsx:24:5]
+ 23 |     setStep(4);
+ 24 |     refresh(); // Refresh global context
+    :     ^^^^^^^^^^
+ 25 |   };
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+    ,-[desktop/src/pages/Setup.tsx:30:5]
+ 29 |     setStep(3);
+ 30 |     refresh();
+    :     ^^^^^^^^^^
+ 31 |   };
+    `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-floating-promises): Promises must be awaited, add void operator to ignore.
+     ,-[desktop/src/components/steps/Step3Gateway.tsx:180:21]
+ 179 |                  onClick={() => {
+ 180 |                     navigator.clipboard.writeText(`docker login ${registryUrl}`);
+     :                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 181 |                     alert("Copied: docker login " + registryUrl);
+     `----
+  help: The promise must end with a call to .catch, or end with a call to .then with a rejection handler, or be explicitly marked as ignored with the `void` operator.
+
+  x typescript-eslint(no-unnecessary-boolean-literal-compare): This rule requires the `strictNullChecks` compiler option to be turned on to function correctly.
+   ,-[desktop/vite.config.ts:1:1]
+ 1 | import { defineConfig } from "vite";
+   : ^
+ 2 | import react from "@vitejs/plugin-react";
+   `----
+
+Found 0 warnings and 167 errors.
+Finished in 6.6s on 2774 files with 134 rules using 32 threads.
+ ELIFECYCLE  Command failed with exit code 1.
+ ELIFECYCLE  Command failed with exit code 1.

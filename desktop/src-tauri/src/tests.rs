@@ -38,26 +38,14 @@ async fn get_test_db() -> sqlx::PgPool {
         return connect_and_migrate(&url).await;
     }
 
-    // 3. Otherwise, attempt to start the embedded PG using a mock AppHandle
-    println!("[test-db] No PG found on standard port or environment. Attempting to start embedded PG...");
-    let app = tauri::test::mock_app();
-    let pg_manager = PgRuntimeManager::new(app.handle().clone());
-
-    // Basic bootstrap logic from main.rs (headless version)
-    // Note: this may fail in pure CI if binaries haven't been downloaded/extracted yet.
-    if let Err(e) = pg_manager.setup_runtime() {
-         panic!("[test-db] Critical: Could not start embedded PG and no existing PG found. Setup error: {}. Tip: Run the app once to extract binaries or start a PG manually.", e);
-    }
-    
-    pg_manager.handle_stale_lock().expect("Failed to handle stale PG lock");
-    
-    // Use dynamic port to avoid collision if 18789 is held by another process but not responding
-    let port = pg_manager.find_available_port().expect("Failed to find any available port");
-    pg_manager.start_server(port).expect("Failed to start embedded PG");
-    pg_manager.wait_for_ready(port, 30).expect("Embedded PG failed to become ready");
-    
-    let url = format!("postgresql://openclaw@127.0.0.1:{}/postgres", port);
-    connect_and_migrate(&url).await
+    // 3. Otherwise, do NOT attempt to bootstrap the embedded Windows package inside a headless test.
+    // This cleanly decouples the logic proof (mission lifecycle) from the packaging concern (PgRuntimeManager).
+    panic!(
+        "[test-db] Critical: No running PostgreSQL found on 18789 and DATABASE_URL is not set.\n\
+        The headless test requires an active PostgreSQL instance.\n\
+        Please start the OpenClaw application to boot the local database, OR provide a connection string:\n\
+        Example: $env:DATABASE_URL=\"postgresql://openclaw:password@127.0.0.1:5432/postgres\"; cargo test"
+    );
 }
 
 async fn connect_and_migrate(url: &str) -> sqlx::PgPool {

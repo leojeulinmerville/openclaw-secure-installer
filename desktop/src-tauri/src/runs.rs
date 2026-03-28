@@ -522,17 +522,20 @@ pub async fn reconcile_run_status_core(pool: &sqlx::PgPool, run_id: &str, status
 
         // ── Bridge: update contract status based on run terminal state ──
         let contracts_repo = crate::repositories::contracts_repository::ContractsRepository::new(pool.clone());
+        let current_contract = contracts_repo.get(linkage.contract_id).await.ok();
+        let current_status = current_contract.as_ref().map(|c| c.status.as_str()).unwrap_or("unknown");
+
         match status {
-            RunStatus::Running => {
+            RunStatus::Running if current_status != "active" => {
                 let _ = contracts_repo.update_status(linkage.contract_id, "active".to_string()).await;
             }
-            RunStatus::Done => {
+            RunStatus::Done if current_status != "fulfilled" => {
                 let _ = contracts_repo.update_status(linkage.contract_id, "fulfilled".to_string()).await;
             }
-            RunStatus::Failed | RunStatus::Cancelled => {
+            RunStatus::Failed | RunStatus::Cancelled if current_status != "failed" => {
                 let _ = contracts_repo.update_status(linkage.contract_id, "failed".to_string()).await;
             }
-            RunStatus::Blocked => {
+            RunStatus::Blocked if current_status != "blocked" => {
                 let _ = contracts_repo.update_status(linkage.contract_id, "blocked".to_string()).await;
                 
                 // Record system-initiated block decision (intervention needed)
@@ -585,13 +588,22 @@ pub async fn reconcile_run_status_core(pool: &sqlx::PgPool, run_id: &str, status
         // Create ResumeSnapshot when run ends
         if matches!(status, RunStatus::Done | RunStatus::Failed | RunStatus::Blocked) {
             let snapshots_repo = ResumeSnapshotsRepository::new(pool.clone());
-            let _ = snapshots_repo.create(
-                linkage.mission_id,
-                format!("Run {} ended with status {}", run_id, status_str),
-                Some("auto".to_string()),
-                Some("Review run artifacts and determine next step".to_string()),
-                Some(serde_json::json!({ "run_id": run_id, "status": status_str }))
-            ).await;
+            let latest = snapshots_repo.get_latest(linkage.mission_id).await.ok();
+            let already_snapped = latest.map_or(false, |s| {
+                s.state_blob.as_ref()
+                    .and_then(|b| b.get("run_id"))
+                    .and_then(|id| id.as_str()) == Some(run_id)
+            });
+
+            if !already_snapped {
+                let _ = snapshots_repo.create(
+                    linkage.mission_id,
+                    format!("Run {} ended with status {}", run_id, status_str),
+                    Some("auto".to_string()),
+                    Some("Review run artifacts and determine next step".to_string()),
+                    Some(serde_json::json!({ "run_id": run_id, "status": status_str }))
+                ).await;
+            }
         }
 
         if is_refreshed {

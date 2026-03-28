@@ -553,13 +553,10 @@ export interface DecisionRecord {
 export interface ValidationRecord {
   validation_id: string;
   mission_id: string;
-  contract_id?: string | null;
-  artifact_id?: string | null;
-  validation_type: string;
-  summary: string;
-  is_passing: boolean;
-  score?: number | null;
-  confidence?: number | null;
-  details?: string | null;
+  validation_scope: string;
+  outcome: string;
+  summary: string | null;
+  responsibility_tag: string | null;
+  evidence_links: Record<string, unknown> | null;
   created_at: string;
 }

@@ -36,6 +36,26 @@ impl ProjectionService {
             .and_then(|list| list.into_iter().next());
         let last_validation_summary = last_validation.and_then(|v| v.summary);
 
+        // Compute needs_human_attention
+        let blocked_count: i64 = sqlx::query_as::<_, (i64,)>(
+            "SELECT COUNT(*) FROM contracts WHERE mission_id = $1 AND status = 'blocked'"
+        )
+        .bind(mission_id)
+        .fetch_one(&self.pool)
+        .await
+        .map(|r| r.0)
+        .unwrap_or(0);
+
+        // Compute resume_readiness 
+        let snap_count: i64 = sqlx::query_as::<_, (i64,)>(
+            "SELECT COUNT(*) FROM resume_snapshots WHERE mission_id = $1"
+        )
+        .bind(mission_id)
+        .fetch_one(&self.pool)
+        .await
+        .map(|r| r.0)
+        .unwrap_or(0);
+
         // 3. Upsert projection
         projection_repo.upsert(
             mission_id,
@@ -52,11 +72,11 @@ impl ProjectionService {
             None, // top_blocker
             None, // top_risk
             None, // reference_path
-            mission.resume_readiness,
+            snap_count > 0,
             active_contract_count,
             last_decision_summary,
             last_validation_summary,
-            false, // needs_human_attention (default)
+            blocked_count > 0,
         ).await?;
 
         Ok(())

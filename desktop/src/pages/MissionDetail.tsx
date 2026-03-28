@@ -532,10 +532,10 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
             ) : (
               validations.map(v => (
                 <div key={v.validation_id} className={`p-3 rounded-lg border space-y-2 
-                  ${v.is_passing ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-red-500/5 border-red-500/10'}`}>
+                  ${v.outcome === 'pass' ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-red-500/5 border-red-500/10'}`}>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="font-medium text-white text-sm break-words">{v.summary}</span>
-                    {v.is_passing ? (
+                    <span className="font-medium text-white text-sm break-words">{v.summary || `Run ${v.outcome}`}</span>
+                    {v.outcome === 'pass' ? (
                       <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
                     ) : (
                       <XCircle className="w-5 h-5 text-red-400 shrink-0" />
@@ -543,7 +543,7 @@ export function MissionDetail({ missionId, onNavigate }: MissionDetailProps) {
                   </div>
                   <div className="flex items-center justify-between mt-2">
                     <span className="text-[10px] bg-white/10 text-white/60 uppercase font-bold px-1.5 py-0.5 rounded-sm">
-                      {v.validation_type}
+                      {v.validation_scope}
                     </span>
                     <span className="text-[10px] text-white/40">{new Date(v.created_at).toLocaleString()}</span>
                   </div>
